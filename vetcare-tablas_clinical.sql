@@ -1,16 +1,22 @@
 USE master;
 
+IF DB_ID('VetCare') IS NOT NULL
+  ALTER DATABASE VetCare
+    SET SINGLE_USER 
+    WITH ROLLBACK IMMEDIATE;
+
 DROP DATABASE IF EXISTS VetCare;
 
-GO
 
+GO
 CREATE DATABASE VetCare;
-GO
 
+
+GO
 USE VetCare;
 
-GO
 
+GO
 CREATE TABLE TipoEstudio (
   id_tipo_estudio INT          IDENTITY (1, 1) NOT NULL,
   nombre          VARCHAR (50) NOT NULL UNIQUE,
