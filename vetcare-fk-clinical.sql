@@ -37,3 +37,4 @@ ALTER TABLE DetalleReceta
 
 ALTER TABLE DetalleReceta
   ADD CONSTRAINT FK_DetalleReceta_Medicamento FOREIGN KEY (id_medicamento) REFERENCES Medicamento (id_medicamento);
+  
