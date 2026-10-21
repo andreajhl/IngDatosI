@@ -39,7 +39,7 @@ CREATE TABLE Atencion (
   peso             DECIMAL (10, 2) NOT NULL,
   temperatura      DECIMAL (4, 1)  NULL,
   diagnostico      VARCHAR (500)   NOT NULL,
-  observaciones    TEXT            NULL,
+  observaciones    VARCHAR (MAX)   NULL,
   ref_pago_externo VARCHAR (50)    NULL,
   estado_pago      VARCHAR (20)    NULL,
   PRIMARY KEY (id_atencion),
