@@ -1,0 +1,25 @@
+
+name: Validate PR branches
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches:
+      - main
+      - develop
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR branches
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          if [[ "$BASE" == "main" && "$HEAD" != "develop" ]]; then
+            echo "::error::Only develop can merge into main"
+            exit 1
+          fi
+
+          echo "Branch validation passed"
