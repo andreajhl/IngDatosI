@@ -1,4 +1,4 @@
-create table dueño (
+create table Dueno (
 	id_dueno  int           identity (1, 1) not null,
 	dni       varchar (20)  not null unique,
 	nombre    varchar (50)  not null,
@@ -9,22 +9,22 @@ create table dueño (
 	primary key (id_dueno)
 );
 
-create table especie (
+create table Especie (
 	id_especie int identity (1, 1) not null,
 	nombre     varchar (50) not null unique,
 	primary key (id_especie),
-	constraint ck_especie_nombre check (nombre in ('Perro', 'Gato'))
+	constraint CK_Especie_nombre check (nombre in ('Perro', 'Gato'))
 );
 
-create table raza (
+create table Raza (
 	id_raza    int identity (1, 1) not null,
 	id_especie int not null,
 	nombre     varchar (50) not null,
 	primary key (id_raza),
-	constraint uq_raza_especie_nombre unique (id_especie, nombre)
+	constraint UQ_Raza_especie_nombre unique (id_especie, nombre)
 );
 
-create table mascota (
+create table Mascota (
 	id_mascota       int identity (1, 1) not null,
 	id_dueno         int not null,
 	id_raza          int not null,
@@ -34,31 +34,31 @@ create table mascota (
 	castrado         bit default 0 not null,
 	fecha_baja       date null,
 	primary key (id_mascota),
-	constraint ck_mascota_sexo check (sexo in ('M', 'H')),
-	constraint ck_mascota_fecha_nacimiento check (fecha_nacimiento <= cast(getdate() as date)),
-	constraint ck_mascota_fecha_baja check (
+	constraint CK_Mascota_sexo check (sexo in ('M', 'H')),
+	constraint CK_Mascota_fecha_nacimiento check (fecha_nacimiento <= cast(getdate() as date)),
+	constraint CK_Mascota_fecha_baja check (
 		fecha_baja is null or fecha_baja > fecha_nacimiento
 	)
 );
 
-create table alergia (
+create table Alergia (
 	id_alergia     int identity (1, 1) not null,
 	nombre         varchar (50) not null unique,
 	tipo           varchar (20) not null,
 	id_medicamento int null,
 	primary key (id_alergia),
-	constraint ck_alergia_tipo check (
+	constraint CK_Alergia_tipo check (
 		tipo in ('MEDICAMENTO', 'ALIMENTO', 'AMBIENTAL', 'OTRO')
 	)
 );
 
-create table mascotaalergia (
+create table MascotaAlergia (
 	id_mascota int not null,
 	id_alergia int not null,
 	primary key (id_mascota, id_alergia)
 );
 
-create table tipoestudio (
+create table TipoEstudio (
 	id_tipo_estudio int identity (1, 1) not null,
 	nombre          varchar (50) not null unique,
 	requiere_turno  bit default 0 not null,
@@ -66,7 +66,7 @@ create table tipoestudio (
 	primary key (id_tipo_estudio)
 );
 
-create table atencion (
+create table Atencion (
 	id_atencion      int identity (1, 1) not null,
 	id_mascota       int not null,
 	id_veterinario   int not null,
@@ -84,34 +84,52 @@ create table atencion (
 	ref_pago_externo varchar (50) null,
 	estado_pago      varchar (20) null,
 	primary key (id_atencion),
-	constraint ck_atencion_tipo check (tipo in ('GENERAL', 'ESPECIALIDAD', 'GUARDIA')),
-	constraint ck_atencion_peso check (peso > 0),
-	constraint ck_atencion_especialidad_turno check (
+	constraint CK_Atencion_tipo check (tipo in ('GENERAL', 'ESPECIALIDAD', 'GUARDIA')),
+	constraint CK_Atencion_peso check (peso > 0),
+	constraint CK_Atencion_especialidad_turno check (
 		not (tipo = 'ESPECIALIDAD' and id_turno is null)
 	),
-	constraint ck_atencion_guardia_turno check (
+	constraint CK_Atencion_guardia_turno check (
 		not (tipo = 'GUARDIA' and id_turno_guardia is null)
 	)
 );
 
-create unique index uq_atencion_id_turno
-	on atencion (id_turno)
-	where id_turno is not null;
+go
 
-create table estudio (
+create trigger TR_Atencion_turno_unico
+on Atencion
+after insert, update
+as
+begin
+	if exists (
+		select 1
+		from Atencion
+		where id_turno is not null
+		group by id_turno
+		having count(*) > 1
+	)
+	begin
+		raiserror('el turno ya esta asignado a otra atencion', 16, 1);
+		rollback transaction;
+	end
+end;
+
+go
+
+create table Estudio (
 	id_estudio        int identity (1, 1) not null,
 	id_atencion       int not null,
 	id_tipo_estudio   int not null,
 	id_turno          int null,
-	fecha_solicitud   datetime2 constraint df_estudio_fecha_solicitud default sysdatetime() not null,
+	fecha_solicitud   datetime2 constraint DF_Estudio_fecha_solicitud default sysdatetime() not null,
 	fecha_realizacion datetime2 null,
 	fecha_resultado   datetime2 null,
 	resultado         varchar (500) null,
 	primary key (id_estudio),
-	constraint ck_estudio_fecha_resultado check (fecha_resultado > fecha_solicitud)
+	constraint CK_Estudio_fecha_resultado check (fecha_resultado > fecha_solicitud)
 );
 
-create table receta (
+create table Receta (
 	id_receta              int identity (1, 1) not null,
 	id_atencion            int not null,
 	fecha                  date default getdate() not null,
@@ -119,78 +137,12 @@ create table receta (
 	primary key (id_receta)
 );
 
-create table detallereceta (
+create table DetalleReceta (
 	id_receta      int not null,
 	id_medicamento int not null,
 	dosis          varchar (50) not null,
 	frecuencia     varchar (50) not null,
 	duracion_dias  int not null,
 	primary key (id_receta, id_medicamento),
-	constraint ck_detallereceta_duracion_dias check (duracion_dias > 0)
+	constraint CK_DetalleReceta_duracion_dias check (duracion_dias > 0)
 );
-
-go
-
-alter table raza
-	add constraint fk_raza_especie
-	foreign key (id_especie) references especie (id_especie);
-
-alter table mascota
-	add constraint fk_mascota_dueno
-	foreign key (id_dueno) references dueño (id_dueno);
-
-alter table mascota
-	add constraint fk_mascota_raza
-	foreign key (id_raza) references raza (id_raza);
-
-alter table alergia
-	add constraint fk_alergia_medicamento
-	foreign key (id_medicamento) references medicamento (id_medicamento);
-
-alter table mascotaalergia
-	add constraint fk_mascotaalergia_mascota
-	foreign key (id_mascota) references mascota (id_mascota);
-
-alter table mascotaalergia
-	add constraint fk_mascotaalergia_alergia
-	foreign key (id_alergia) references alergia (id_alergia);
-
-alter table atencion
-	add constraint fk_atencion_mascota
-	foreign key (id_mascota) references mascota (id_mascota);
-
-alter table atencion
-	add constraint fk_atencion_veterinario
-	foreign key (id_veterinario) references veterinario (id_empleado);
-
-alter table atencion
-	add constraint fk_atencion_turno
-	foreign key (id_turno) references turno (id_turno);
-
-alter table atencion
-	add constraint fk_atencion_turnoguardia
-	foreign key (id_turno_guardia) references turnoguardia (id_turno_guardia);
-
-alter table estudio
-	add constraint fk_estudio_atencion
-	foreign key (id_atencion) references atencion (id_atencion);
-
-alter table estudio
-	add constraint fk_estudio_tipoestudio
-	foreign key (id_tipo_estudio) references tipoestudio (id_tipo_estudio);
-
-alter table estudio
-	add constraint fk_estudio_turno
-	foreign key (id_turno) references turno (id_turno);
-
-alter table receta
-	add constraint fk_receta_atencion
-	foreign key (id_atencion) references atencion (id_atencion);
-
-alter table detallereceta
-	add constraint fk_detallereceta_receta
-	foreign key (id_receta) references receta (id_receta);
-
-alter table detallereceta
-	add constraint fk_detallereceta_medicamento
-	foreign key (id_medicamento) references medicamento (id_medicamento);
