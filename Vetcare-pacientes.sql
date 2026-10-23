@@ -1,56 +1,56 @@
-create table Dueno (
-	id_dueno  int           identity (1, 1) not null,
-	dni       varchar (20)  not null unique,
-	telefono  varchar (30)  not null,
-	email     varchar (100) null,
-	direccion varchar (200) null,
-	primary key (id_dueno)
+CREATE TABLE Dueno (
+	id_dueno  int           IDENTITY (1, 1) NOT NULL,
+	dni       varchar (20)  NOT NULL UNIQUE,
+	telefono  varchar (30)  NOT NULL,
+	email     varchar (100) NULL,
+	direccion varchar (200) NULL,
+	PRIMARY KEY (id_dueno)
 );
 
-create table Especie (
-	id_especie int identity (1, 1) not null,
-	nombre     varchar (50) not null unique,
-	primary key (id_especie),
-	constraint CK_Especie_nombre check (nombre in ('Perro', 'Gato'))
+CREATE TABLE Especie (
+	id_especie int IDENTITY (1, 1) NOT NULL,
+	nombre     varchar (50) NOT NULL UNIQUE,
+	PRIMARY KEY (id_especie),
+	CONSTRAINT CK_Especie_nombre CHECK (nombre IN ('Perro', 'Gato'))
 );
 
-create table Raza (
-	id_raza    int identity (1, 1) not null,
-	id_especie int not null,
-	nombre     varchar (50) not null,
-	primary key (id_raza),
-	constraint UQ_Raza_especie_nombre unique (id_especie, nombre)
+CREATE TABLE Raza (
+	id_raza    int IDENTITY (1, 1) NOT NULL,
+	id_especie int NOT NULL,
+	nombre     varchar (50) NOT NULL,
+	PRIMARY KEY (id_raza),
+	CONSTRAINT UQ_Raza_especie_nombre UNIQUE (id_especie, nombre)
 );
 
-create table Mascota (
-	id_mascota       int identity (1, 1) not null,
-	id_dueno         int not null,
-	id_raza          int not null,
-	sexo             char (1) not null,
-	fecha_nacimiento date not null,
-	castrado         bit default 0 not null,
-	fecha_baja       date null,
-	primary key (id_mascota),
-	constraint CK_Mascota_sexo check (sexo in ('M', 'H')),
-	constraint CK_Mascota_fecha_nacimiento check (fecha_nacimiento <= cast(getdate() as date)),
-	constraint CK_Mascota_fecha_baja check (
-		fecha_baja is null or fecha_baja > fecha_nacimiento
+CREATE TABLE Mascota (
+	id_mascota       int IDENTITY (1, 1) NOT NULL,
+	id_dueno         int NOT NULL,
+	id_raza          int NOT NULL,
+	sexo             char (1) NOT NULL,
+	fecha_nacimiento date NOT NULL,
+	castrado         bit DEFAULT 0 NOT NULL,
+	fecha_baja       date NULL,
+	PRIMARY KEY (id_mascota),
+	CONSTRAINT CK_Mascota_sexo CHECK (sexo IN ('M', 'H')),
+	CONSTRAINT CK_Mascota_fecha_nacimiento CHECK (fecha_nacimiento <= CAST(getdate() AS date)),
+	CONSTRAINT CK_Mascota_fecha_baja CHECK (
+		fecha_baja IS null OR fecha_baja > fecha_nacimiento
 	)
 );
 
-create table Alergia (
-	id_alergia     int identity (1, 1) not null,
-	nombre         varchar (50) not null unique,
-	tipo           varchar (20) not null,
-	id_medicamento int null,
-	primary key (id_alergia),
-	constraint CK_Alergia_tipo check (
-		tipo in ('MEDICAMENTO', 'ALIMENTO', 'AMBIENTAL', 'OTRO')
+CREATE TABLE Alergia (
+	id_alergia     int IDENTITY (1, 1) NOT NULL,
+	nombre         varchar (50) NOT NULL UNIQUE,
+	tipo           varchar (20) NOT NULL,
+	id_medicamento int NULL,
+	PRIMARY KEY (id_alergia),
+	CONSTRAINT CK_Alergia_tipo CHECK (
+		tipo IN ('MEDICAMENTO', 'ALIMENTO', 'AMBIENTAL', 'OTRO')
 	)
 );
 
-create table MascotaAlergia (
-	id_mascota int not null,
-	id_alergia int not null,
-	primary key (id_mascota, id_alergia)
+CREATE TABLE MascotaAlergia (
+	id_mascota int NOT NULL,
+	id_alergia int NOT NULL,
+	PRIMARY KEY (id_mascota, id_alergia)
 );

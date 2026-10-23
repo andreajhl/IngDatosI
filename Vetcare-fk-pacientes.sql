@@ -1,23 +1,23 @@
-alter table Raza
-	add constraint FK_Raza_Especie
-	foreign key (id_especie) references Especie (id_especie);
+ALTER TABLE Raza
+	ADD CONSTRAINT FK_Raza_Especie
+	FOREIGN KEY (id_especie) REFERENCES Especie (id_especie);
 
-alter table Mascota
-	add constraint FK_Mascota_Dueno
-	foreign key (id_dueno) references Dueno (id_dueno);
+ALTER TABLE Mascota
+	ADD CONSTRAINT FK_Mascota_Dueno
+	FOREIGN KEY (id_dueno) REFERENCES Dueno (id_dueno);
 
-alter table Mascota
-	add constraint FK_Mascota_Raza
-	foreign key (id_raza) references Raza (id_raza);
+ALTER TABLE Mascota
+	ADD CONSTRAINT FK_Mascota_Raza
+	FOREIGN KEY (id_raza) REFERENCES Raza (id_raza);
 
-alter table Alergia
-	add constraint FK_Alergia_Medicamento
-	foreign key (id_medicamento) references Medicamento (id_medicamento);
+ALTER TABLE Alergia
+	ADD CONSTRAINT FK_Alergia_Medicamento
+	FOREIGN KEY (id_medicamento) REFERENCES Medicamento (id_medicamento);
 
-alter table MascotaAlergia
-	add constraint FK_MascotaAlergia_Mascota
-	foreign key (id_mascota) references Mascota (id_mascota);
+ALTER TABLE MascotaAlergia
+	ADD CONSTRAINT FK_MascotaAlergia_Mascota
+	FOREIGN KEY (id_mascota) REFERENCES Mascota (id_mascota);
 
-alter table MascotaAlergia
-	add constraint FK_MascotaAlergia_Alergia
-	foreign key (id_alergia) references Alergia (id_alergia);
+ALTER TABLE MascotaAlergia
+	ADD CONSTRAINT FK_MascotaAlergia_Alergia
+	FOREIGN KEY (id_alergia) REFERENCES Alergia (id_alergia);
