@@ -77,63 +77,63 @@ CREATE TABLE MascotaAlergia (
 GO
 -- 3. Tablas de Personal y Agenda
 CREATE TABLE Empleado (
-  idEmpleado INT           IDENTITY (1, 1) PRIMARY KEY,
-  dni        INT           NOT NULL UNIQUE, -- dato sensible
-  nombre     VARCHAR (50)  NOT NULL,
-  apellido   VARCHAR (50)  NOT NULL,
-  telefono   VARCHAR (20)  NOT NULL, -- dato sensible
-  direccion  VARCHAR (100) NOT NULL, -- dato sensible
-  tipo       VARCHAR (20)  NOT NULL CHECK (tipo IN ('veterinario', 'administrativo', 'ayudante')),
-  activo     BIT           DEFAULT 1 NOT NULL -- baja logica
+  id_empleado INT           IDENTITY (1, 1) PRIMARY KEY,
+  dni         INT           NOT NULL UNIQUE, -- dato sensible
+  nombre      VARCHAR (50)  NOT NULL,
+  apellido    VARCHAR (50)  NOT NULL,
+  telefono    VARCHAR (20)  NOT NULL, -- dato sensible
+  direccion   VARCHAR (100) NOT NULL, -- dato sensible
+  tipo        VARCHAR (20)  NOT NULL CHECK (tipo IN ('veterinario', 'administrativo', 'ayudante')),
+  activo      BIT           DEFAULT 1 NOT NULL -- baja logica
 );
 
 CREATE TABLE Veterinario (
-  idVeterinario INT NOT NULL PRIMARY KEY,
-  matricula     INT NOT NULL UNIQUE
+  id_veterinario INT NOT NULL PRIMARY KEY,
+  matricula      INT NOT NULL UNIQUE
 );
 
 CREATE TABLE Administrativo (
-  idAdministrativo INT          NOT NULL PRIMARY KEY,
-  sector           VARCHAR (30) NOT NULL CHECK (sector IN ('recepcion', 'facturacion', 'administracion'))
+  id_administrativo INT          NOT NULL PRIMARY KEY,
+  sector            VARCHAR (30) NOT NULL CHECK (sector IN ('recepcion', 'facturacion', 'administracion'))
 );
 
 CREATE TABLE Ayudante (
-  idAyudante INT          NOT NULL PRIMARY KEY,
-  area       VARCHAR (20) NOT NULL CHECK (area IN ('consultorio', 'internacion', 'internación'))
+  id_ayudante INT          NOT NULL PRIMARY KEY,
+  area        VARCHAR (20) NOT NULL CHECK (area IN ('consultorio', 'internacion', 'internación'))
 );
 
 CREATE TABLE Especialidad (
-  idEspecialidad INT          IDENTITY (1, 1) PRIMARY KEY,
-  nombre         VARCHAR (50) NOT NULL UNIQUE
+  id_especialidad INT          IDENTITY (1, 1) PRIMARY KEY,
+  nombre          VARCHAR (50) NOT NULL UNIQUE
 );
 
 CREATE TABLE VeterinarioEspecialidad (
-  idVeterinario  INT NOT NULL,
-  idEspecialidad INT NOT NULL,
-  PRIMARY KEY (idVeterinario, idEspecialidad)
+  id_veterinario  INT NOT NULL,
+  id_especialidad INT NOT NULL,
+  PRIMARY KEY (id_veterinario, id_especialidad)
 );
 
 -- turnos y guardias
 CREATE TABLE Turno (
-  idTurno        INT          IDENTITY (1, 1) PRIMARY KEY,
-  fechaHora      DATETIME     NOT NULL,
-  estado         VARCHAR (15) DEFAULT 'pendiente' NOT NULL CHECK (estado IN ('pendiente', 'atendido', 'cancelado', 'ausente')),
-  idMascota      INT          NOT NULL,
-  idVeterinario  INT          NOT NULL,
-  idEspecialidad INT          NULL
+  id_turno        INT          IDENTITY (1, 1) PRIMARY KEY,
+  fecha_hora      DATETIME     NOT NULL,
+  estado          VARCHAR (15) DEFAULT 'pendiente' NOT NULL CHECK (estado IN ('pendiente', 'atendido', 'cancelado', 'ausente')),
+  id_mascota      INT          NOT NULL,
+  id_veterinario  INT          NOT NULL,
+  id_especialidad INT          NULL
 );
 
 CREATE TABLE TurnoGuardia (
-  idTurnoGuardia INT      IDENTITY (1, 1) PRIMARY KEY,
-  fechaInicio    DATETIME NOT NULL,
-  fechaFin       DATETIME NOT NULL,
-  CHECK (fechaFin > fechaInicio)
+  id_turno_guardia INT      IDENTITY (1, 1) PRIMARY KEY,
+  fecha_inicio     DATETIME NOT NULL,
+  fecha_fin        DATETIME NOT NULL,
+  CHECK (fecha_fin > fecha_inicio)
 );
 
 CREATE TABLE TurnoGuardiaVeterinario (
-  idTurnoGuardia INT NOT NULL,
-  idVeterinario  INT NOT NULL,
-  PRIMARY KEY (idTurnoGuardia, idVeterinario)
+  id_turno_guardia INT NOT NULL,
+  id_veterinario   INT NOT NULL,
+  PRIMARY KEY (id_turno_guardia, id_veterinario)
 );
 
 
@@ -152,7 +152,7 @@ CREATE TABLE Atencion (
   id_mascota       INT             NOT NULL,
   id_veterinario   INT             NOT NULL,
   tipo             VARCHAR (20)    NOT NULL,
-  fecha_hora       DATETIME2       DEFAULT SYSDATETIME() NOT NULL,
+  fecha_hora       DATETIME        DEFAULT GETDATE() NOT NULL,
   orden_llegada    INT             NULL,
   id_turno         INT             NULL,
   id_turno_guardia INT             NULL,
@@ -180,9 +180,9 @@ CREATE TABLE Estudio (
   id_atencion       INT           NOT NULL,
   id_tipo_estudio   INT           NOT NULL,
   id_turno          INT           NULL,
-  fecha_solicitud   DATETIME2     CONSTRAINT DF_Estudio_fecha_solicitud DEFAULT SYSDATETIME() NOT NULL,
-  fecha_realizacion DATETIME2     NULL,
-  fecha_resultado   DATETIME2     NULL,
+  fecha_solicitud   DATETIME      CONSTRAINT DF_Estudio_fecha_solicitud DEFAULT GETDATE() NOT NULL,
+  fecha_realizacion DATETIME      NULL,
+  fecha_resultado   DATETIME      NULL,
   resultado         VARCHAR (500) NULL,
   PRIMARY KEY (id_estudio),
   CONSTRAINT CK_Estudio_fecha_resultado CHECK (fecha_resultado >= fecha_solicitud)
@@ -308,37 +308,37 @@ GO
 -- 7. FK Personal y Agenda
 -- fk subtipos a empleado
 ALTER TABLE Veterinario
-  ADD FOREIGN KEY (idVeterinario) REFERENCES Empleado (idEmpleado);
+  ADD FOREIGN KEY (id_veterinario) REFERENCES Empleado (id_empleado);
 
 ALTER TABLE Administrativo
-  ADD FOREIGN KEY (idAdministrativo) REFERENCES Empleado (idEmpleado);
+  ADD FOREIGN KEY (id_administrativo) REFERENCES Empleado (id_empleado);
 
 ALTER TABLE Ayudante
-  ADD FOREIGN KEY (idAyudante) REFERENCES Empleado (idEmpleado);
+  ADD FOREIGN KEY (id_ayudante) REFERENCES Empleado (id_empleado);
 
 -- veterinario especialidad
 ALTER TABLE VeterinarioEspecialidad
-  ADD FOREIGN KEY (idVeterinario) REFERENCES Veterinario (idVeterinario);
+  ADD FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 ALTER TABLE VeterinarioEspecialidad
-  ADD FOREIGN KEY (idEspecialidad) REFERENCES Especialidad (idEspecialidad);
+  ADD FOREIGN KEY (id_especialidad) REFERENCES Especialidad (id_especialidad);
 
 -- turnos
 ALTER TABLE Turno
-  ADD FOREIGN KEY (idVeterinario) REFERENCES Veterinario (idVeterinario);
+  ADD FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 ALTER TABLE Turno
-  ADD FOREIGN KEY (idEspecialidad) REFERENCES Especialidad (idEspecialidad);
+  ADD FOREIGN KEY (id_especialidad) REFERENCES Especialidad (id_especialidad);
 
 ALTER TABLE Turno
-  ADD FOREIGN KEY (idMascota) REFERENCES Mascota (idMascota); -- tabla de opcion 1
+  ADD FOREIGN KEY (id_mascota) REFERENCES Mascota (id_mascota); -- tabla de opcion 1
 
 -- guardias
 ALTER TABLE TurnoGuardiaVeterinario
-  ADD FOREIGN KEY (idTurnoGuardia) REFERENCES TurnoGuardia (idTurnoGuardia);
+  ADD FOREIGN KEY (id_turno_guardia) REFERENCES TurnoGuardia (id_turno_guardia);
 
 ALTER TABLE TurnoGuardiaVeterinario
-  ADD FOREIGN KEY (idVeterinario) REFERENCES Veterinario (idVeterinario);
+  ADD FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 
 GO
@@ -348,7 +348,7 @@ ALTER TABLE Atencion
   ADD CONSTRAINT FK_Atencion_Mascota FOREIGN KEY (id_mascota) REFERENCES Mascota (id_mascota);
 
 ALTER TABLE Atencion
-  ADD CONSTRAINT FK_Atencion_Veterinario FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_empleado);
+  ADD CONSTRAINT FK_Atencion_Veterinario FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 ALTER TABLE Atencion
   ADD CONSTRAINT FK_Atencion_Turno FOREIGN KEY (id_turno) REFERENCES Turno (id_turno);
