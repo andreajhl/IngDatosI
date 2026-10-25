@@ -1,5 +1,7 @@
 CREATE TABLE Dueno (
 	id_dueno  int           IDENTITY (1, 1) NOT NULL,
+	nombre    varchar (50)  NOT NULL,
+	apellido  varchar (50)  NOT NULL,
 	dni       varchar (20)  NOT NULL UNIQUE,
 	telefono  varchar (30)  NOT NULL,
 	email     varchar (100) NULL,
@@ -26,6 +28,7 @@ CREATE TABLE Mascota (
 	id_mascota       int IDENTITY (1, 1) NOT NULL,
 	id_dueno         int NOT NULL,
 	id_raza          int NOT NULL,
+	nombre           varchar (50) NOT NULL,
 	sexo             char (1) NOT NULL,
 	fecha_nacimiento date NOT NULL,
 	castrado         bit DEFAULT 0 NOT NULL,
