@@ -1,5 +1,7 @@
 CREATE TABLE Dueno (
 	id_dueno  int           IDENTITY (1, 1) NOT NULL,
+	nombre    varchar (50)  NOT NULL,
+	apellido  varchar (50)  NOT NULL,
 	dni       varchar (20)  NOT NULL UNIQUE,
 	telefono  varchar (30)  NOT NULL,
 	email     varchar (100) NULL,
@@ -26,10 +28,13 @@ CREATE TABLE Mascota (
 	id_mascota       int IDENTITY (1, 1) NOT NULL,
 	id_dueno         int NOT NULL,
 	id_raza          int NOT NULL,
+	nombre           varchar (50) NOT NULL,
 	sexo             char (1) NOT NULL,
 	fecha_nacimiento date NOT NULL,
 	castrado         bit DEFAULT 0 NOT NULL,
 	fecha_baja       date NULL,
+	causa_baja       varchar (200) NULL,
+	eutanasia        bit DEFAULT 0 NOT NULL,
 	PRIMARY KEY (id_mascota),
 	CONSTRAINT CK_Mascota_sexo CHECK (sexo IN ('M', 'H')),
 	CONSTRAINT CK_Mascota_fecha_nacimiento CHECK (fecha_nacimiento <= CAST(getdate() AS date)),
@@ -50,7 +55,9 @@ CREATE TABLE Alergia (
 );
 
 CREATE TABLE MascotaAlergia (
-	id_mascota int NOT NULL,
-	id_alergia int NOT NULL,
+	id_mascota      int NOT NULL,
+	id_alergia      int NOT NULL,
+	observaciones   varchar (200) NULL,
+	fecha_deteccion date NULL,
 	PRIMARY KEY (id_mascota, id_alergia)
 );
