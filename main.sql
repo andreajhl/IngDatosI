@@ -214,8 +214,8 @@ CREATE TABLE Jaula (
   numero   INT          NOT NULL,
   tamano   VARCHAR (10) NOT NULL,
   activa   BIT          DEFAULT 1 NOT NULL,
-  CONSTRAINT Jaula_Numero UNIQUE (numero),
-  CONSTRAINT Jaula_Tamano CHECK (tamano IN ('chica', 'mediana', 'grande'))
+  CONSTRAINT UQ_jaula_numero UNIQUE (numero),
+  CONSTRAINT CK_jaula_tamano CHECK (tamano IN ('chica', 'mediana', 'grande'))
 );
 
 CREATE TABLE Internacion (
@@ -227,9 +227,9 @@ CREATE TABLE Internacion (
   fecha_hora_ingreso DATETIME      NOT NULL,
   fecha_hora_egreso  DATETIME      NULL,
   tipo_egreso        VARCHAR (10)  NULL,
-  CONSTRAINT Internacion_Fechas CHECK (fecha_hora_egreso IS NULL
+  CONSTRAINT CK_internacion_fechas CHECK (fecha_hora_egreso IS NULL
                                        OR fecha_hora_egreso > fecha_hora_ingreso),
-  CONSTRAINT Internacion_TipoEgreso CHECK (tipo_egreso IN ('alta', 'derivada', 'fallecida'))
+  CONSTRAINT CK_internacion_tipo_egreso CHECK (tipo_egreso IN ('alta', 'derivada', 'fallecida'))
 );
 
 CREATE TABLE EvolucionInternacion (
@@ -250,7 +250,7 @@ CREATE TABLE Medicamento (
   unidad_medida    VARCHAR (30)  NOT NULL,
   stock_minimo     INT           NOT NULL,
   activo           BIT           DEFAULT 1 NOT NULL,
-  CONSTRAINT Medicamento_StockMinimo CHECK (stock_minimo >= 0)
+  CONSTRAINT CK_medicamento_stock_minimo CHECK (stock_minimo >= 0)
 );
 
 CREATE TABLE UsoMedicamento (
@@ -262,8 +262,8 @@ CREATE TABLE UsoMedicamento (
   via_aplicacion VARCHAR (50)  NULL,
   cantidad       INT           NOT NULL,
   fecha_hora     DATETIME      DEFAULT GETDATE() NOT NULL,
-  CONSTRAINT UsoMedicamento_Cantidad CHECK (cantidad > 0),
-  CONSTRAINT UsoMedicamento_Destino CHECK ((id_atencion IS NOT NULL
+  CONSTRAINT CK_uso_medicamento_cantidad CHECK (cantidad > 0),
+  CONSTRAINT CK_uso_medicamento_destino CHECK ((id_atencion IS NOT NULL
                                             AND id_evolucion IS NULL)
                                            OR (id_atencion IS NULL
                                                AND id_evolucion IS NOT NULL))
@@ -277,8 +277,8 @@ CREATE TABLE MovimientoStock (
   cantidad       INT           NOT NULL,
   fecha_hora     DATETIME      DEFAULT GETDATE() NOT NULL,
   motivo         VARCHAR (500) NULL,
-  CONSTRAINT MovimientoStock_Tipo CHECK (tipo IN ('ingreso', 'ajuste')),
-  CONSTRAINT MovimientoStock_Ingreso CHECK (tipo <> 'ingreso'
+  CONSTRAINT CK_movimiento_stock_tipo CHECK (tipo IN ('ingreso', 'ajuste')),
+  CONSTRAINT CK_movimiento_stock_ingreso CHECK (tipo <> 'ingreso'
                                             OR cantidad > 0)
 );
 
@@ -385,7 +385,65 @@ ALTER TABLE DetalleReceta
 
 
 GO
--- 9. Roles y permisos
+
+-- 9. FK Internacion y Stock
+-- Internacion
+ALTER TABLE Internacion
+ADD CONSTRAINT FK_internacion_atencion
+FOREIGN KEY (id_atencion)
+REFERENCES Atencion(id_atencion);
+
+ALTER TABLE Internacion
+ADD CONSTRAINT FK_internacion_veterinario
+FOREIGN KEY (id_veterinario)
+REFERENCES Veterinario(id_veterinario);
+
+ALTER TABLE Internacion
+ADD CONSTRAINT FK_internacion_jaula
+FOREIGN KEY (id_jaula)
+REFERENCES Jaula(id_jaula);
+
+-- Evolucion Internacion
+ALTER TABLE EvolucionInternacion
+ADD CONSTRAINT FK_evolucion_internacion
+FOREIGN KEY (id_internacion)
+REFERENCES Internacion(id_internacion);
+
+ALTER TABLE EvolucionInternacion
+ADD CONSTRAINT FK_evolucion_empleado
+FOREIGN KEY (id_empleado)
+REFERENCES Empleado(id_empleado);
+
+-- Uso Medicamento
+ALTER TABLE UsoMedicamento
+ADD CONSTRAINT FK_uso_medicamento
+FOREIGN KEY (id_medicamento)
+REFERENCES Medicamento(id_medicamento);
+
+ALTER TABLE UsoMedicamento
+ADD CONSTRAINT FK_uso_atencion
+FOREIGN KEY (id_atencion)
+REFERENCES Atencion(id_atencion);
+
+ALTER TABLE UsoMedicamento
+ADD CONSTRAINT FK_uso_evolucion
+FOREIGN KEY (id_evolucion)
+REFERENCES EvolucionInternacion(id_evolucion);
+
+-- Movimiento Stock
+ALTER TABLE MovimientoStock
+ADD CONSTRAINT FK_movimiento_medicamento
+FOREIGN KEY (id_medicamento)
+REFERENCES Medicamento(id_medicamento);
+
+ALTER TABLE MovimientoStock
+ADD CONSTRAINT FK_movimiento_empleado
+FOREIGN KEY (id_empleado)
+REFERENCES Empleado(id_empleado);
+
+GO
+  
+-- 10. Roles y permisos
 USE VetCare;
 
 
