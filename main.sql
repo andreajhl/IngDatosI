@@ -1,3 +1,6 @@
+------------------------------------------------------------------------------------
+---------------------- Creacion de tablas y relaciones -----------------------------
+------------------------------------------------------------------------------------
 -- 1. Creacion de la base de datos
 USE master;
 
@@ -235,7 +238,7 @@ CREATE TABLE Internacion (
   fecha_hora_egreso  DATETIME      NULL,
   tipo_egreso        VARCHAR (10)  NULL,
   CONSTRAINT CK_internacion_fechas CHECK (fecha_hora_egreso IS NULL
-                                       OR fecha_hora_egreso > fecha_hora_ingreso),
+                                          OR fecha_hora_egreso > fecha_hora_ingreso),
   CONSTRAINT CK_internacion_tipo_egreso CHECK (tipo_egreso IN ('alta', 'derivada', 'fallecida'))
 );
 
@@ -271,9 +274,9 @@ CREATE TABLE UsoMedicamento (
   fecha_hora     DATETIME      DEFAULT GETDATE() NOT NULL,
   CONSTRAINT CK_uso_medicamento_cantidad CHECK (cantidad > 0),
   CONSTRAINT CK_uso_medicamento_destino CHECK ((id_atencion IS NOT NULL
-                                            AND id_evolucion IS NULL)
-                                           OR (id_atencion IS NULL
-                                               AND id_evolucion IS NOT NULL))
+                                                AND id_evolucion IS NULL)
+                                               OR (id_atencion IS NULL
+                                                   AND id_evolucion IS NOT NULL))
 );
 
 CREATE TABLE MovimientoStock (
@@ -286,7 +289,7 @@ CREATE TABLE MovimientoStock (
   motivo         VARCHAR (500) NULL,
   CONSTRAINT CK_movimiento_stock_tipo CHECK (tipo IN ('ingreso', 'ajuste')),
   CONSTRAINT CK_movimiento_stock_ingreso CHECK (tipo <> 'ingreso'
-                                            OR cantidad > 0)
+                                                OR cantidad > 0)
 );
 
 
@@ -392,64 +395,43 @@ ALTER TABLE DetalleReceta
 
 
 GO
-
 -- 9. FK Internacion y Stock
 -- Internacion
 ALTER TABLE Internacion
-ADD CONSTRAINT FK_internacion_atencion
-FOREIGN KEY (id_atencion)
-REFERENCES Atencion(id_atencion);
+  ADD CONSTRAINT FK_internacion_atencion FOREIGN KEY (id_atencion) REFERENCES Atencion (id_atencion);
 
 ALTER TABLE Internacion
-ADD CONSTRAINT FK_internacion_veterinario
-FOREIGN KEY (id_veterinario)
-REFERENCES Veterinario(id_veterinario);
+  ADD CONSTRAINT FK_internacion_veterinario FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 ALTER TABLE Internacion
-ADD CONSTRAINT FK_internacion_jaula
-FOREIGN KEY (id_jaula)
-REFERENCES Jaula(id_jaula);
+  ADD CONSTRAINT FK_internacion_jaula FOREIGN KEY (id_jaula) REFERENCES Jaula (id_jaula);
 
 -- Evolucion Internacion
 ALTER TABLE EvolucionInternacion
-ADD CONSTRAINT FK_evolucion_internacion
-FOREIGN KEY (id_internacion)
-REFERENCES Internacion(id_internacion);
+  ADD CONSTRAINT FK_evolucion_internacion FOREIGN KEY (id_internacion) REFERENCES Internacion (id_internacion);
 
 ALTER TABLE EvolucionInternacion
-ADD CONSTRAINT FK_evolucion_empleado
-FOREIGN KEY (id_empleado)
-REFERENCES Empleado(id_empleado);
+  ADD CONSTRAINT FK_evolucion_empleado FOREIGN KEY (id_empleado) REFERENCES Empleado (id_empleado);
 
 -- Uso Medicamento
 ALTER TABLE UsoMedicamento
-ADD CONSTRAINT FK_uso_medicamento
-FOREIGN KEY (id_medicamento)
-REFERENCES Medicamento(id_medicamento);
+  ADD CONSTRAINT FK_uso_medicamento FOREIGN KEY (id_medicamento) REFERENCES Medicamento (id_medicamento);
 
 ALTER TABLE UsoMedicamento
-ADD CONSTRAINT FK_uso_atencion
-FOREIGN KEY (id_atencion)
-REFERENCES Atencion(id_atencion);
+  ADD CONSTRAINT FK_uso_atencion FOREIGN KEY (id_atencion) REFERENCES Atencion (id_atencion);
 
 ALTER TABLE UsoMedicamento
-ADD CONSTRAINT FK_uso_evolucion
-FOREIGN KEY (id_evolucion)
-REFERENCES EvolucionInternacion(id_evolucion);
+  ADD CONSTRAINT FK_uso_evolucion FOREIGN KEY (id_evolucion) REFERENCES EvolucionInternacion (id_evolucion);
 
 -- Movimiento Stock
 ALTER TABLE MovimientoStock
-ADD CONSTRAINT FK_movimiento_medicamento
-FOREIGN KEY (id_medicamento)
-REFERENCES Medicamento(id_medicamento);
+  ADD CONSTRAINT FK_movimiento_medicamento FOREIGN KEY (id_medicamento) REFERENCES Medicamento (id_medicamento);
 
 ALTER TABLE MovimientoStock
-ADD CONSTRAINT FK_movimiento_empleado
-FOREIGN KEY (id_empleado)
-REFERENCES Empleado(id_empleado);
+  ADD CONSTRAINT FK_movimiento_empleado FOREIGN KEY (id_empleado) REFERENCES Empleado (id_empleado);
+
 
 GO
-  
 -- 10. Roles y permisos
 USE VetCare;
 
@@ -517,3 +499,256 @@ DENY select
 
 DENY select
   ON Atencion (diagnostico, ref_pago_externo, estado_pago) TO rol_ayudante;
+
+
+GO
+------------------------------------------------------------------------------------
+-------------------------------- Carga de datos ------------------------------------
+------------------------------------------------------------------------------------
+-- 1. Medicamentos
+INSERT  INTO Medicamento (
+  nombre_comercial,
+  droga,
+  presentacion,
+  unidad_medida,
+  stock_minimo
+)
+VALUES                   ('Amoxidal', 'Amoxicilina', 'Comprimidos 500 mg', 'comprimido', 20),
+                         ('Metacam', 'Meloxicam', 'Suspension oral 1.5 mg/ml', 'ml', 50),
+                         ('Ivomec', 'Ivermectina', 'Inyectable 1%', 'ml', 10);
+
+-- 2. Pacientes
+INSERT  INTO Dueno (
+  nombre,
+  apellido,
+  dni,
+  telefono,
+  email,
+  direccion
+)
+VALUES             ('Laura', 'Gomez', '30111222', '1155550001', 'laura.gomez@mail.com', 'Av. Corrientes 1234'),
+                   ('Martin', 'Perez', '28333444', '1155550002', NULL, 'Av. Santa Fe 123'),
+                   ('Sofia', 'Lopez', '32555666', '1155550003', 'sofia.lopez@mail.com', NULL);
+
+INSERT  INTO Especie (
+  nombre
+)
+VALUES               ('Perro'),
+                     ('Gato');
+
+INSERT  INTO Raza (
+  id_especie,
+  nombre
+)
+VALUES            (1, 'Labrador'),
+                  (1, 'Caniche'),
+                  (2, 'Salchicha'),
+                  (2, 'Chihuhua');
+
+INSERT  INTO Mascota (
+  id_dueno,
+  id_raza,
+  nombre,
+  sexo,
+  fecha_nacimiento,
+  castrado
+)
+VALUES               (1, 1, 'Toby', 'M', '2019-03-10', 1),
+                     (1, 3, 'Mishi', 'H', '2021-07-22', 1),
+                     (2, 2, 'Luna', 'H', '2018-11-05', 0),
+                     (3, 4, 'Simba', 'M', '2022-01-15', 0);
+
+INSERT  INTO Alergia (
+  nombre,
+  tipo,
+  id_medicamento
+)
+VALUES               ('Penicilina', 'MEDICAMENTO', 1),
+                     ('Pollo', 'ALIMENTO', NULL),
+                     ('Polen', 'AMBIENTAL', NULL);
+
+INSERT  INTO MascotaAlergia (
+  id_mascota,
+  id_alergia,
+  observaciones,
+  fecha_deteccion
+)
+VALUES                      (1, 1, 'Reaccion cutanea tras tratamiento', '2023-05-12'),
+                            (3, 2, NULL, '2022-09-01');
+
+-- 3. Personal y Agenda
+INSERT  INTO Empleado (
+  dni,
+  nombre,
+  apellido,
+  telefono,
+  direccion,
+  tipo
+)
+VALUES                (25111000, 'Carlos', 'Ruiz', '1144440001', 'Av. Rivadavia 500', 'veterinario'),
+                      (27222000, 'Ana', 'Fernandez', '1144440002', 'Av. Cabildo 2100', 'veterinario'),
+                      (32333000, 'Julia', 'Martinez', '1144440003', 'Av. Santa Fe 800', 'administrativo'),
+                      (38444000, 'Diego', 'Hernandez', '1144440004', 'Callao 45', 'ayudante');
+
+INSERT  INTO Veterinario (
+  id_veterinario,
+  matricula
+)
+VALUES                   (1, 10001),
+                         (2, 10002);
+
+INSERT  INTO Administrativo (
+  id_administrativo,
+  sector
+)
+VALUES                      (3, 'recepcion');
+
+INSERT  INTO Ayudante (
+  id_ayudante,
+  area
+)
+VALUES                (4, 'internacion');
+
+INSERT  INTO Especialidad (
+  nombre
+)
+VALUES                    ('Cardiologia'),
+                          ('Dermatologia');
+
+INSERT  INTO VeterinarioEspecialidad (
+  id_veterinario,
+  id_especialidad
+)
+VALUES                               (2, 1),
+                                     (2, 2);
+
+INSERT  INTO Turno (
+  fecha_hora,
+  estado,
+  id_mascota,
+  id_veterinario,
+  id_especialidad
+)
+VALUES             ('2026-10-01 10:00', 'atendido', 1, 2, 1),
+                   ('2026-11-05 16:30', 'pendiente', 4, 2, 2);
+
+INSERT  INTO TurnoGuardia (
+  fecha_inicio,
+  fecha_fin
+)
+VALUES                    ('2026-10-10 20:00', '2026-10-11 08:00');
+
+INSERT  INTO TurnoGuardiaVeterinario (
+  id_turno_guardia,
+  id_veterinario
+)
+VALUES                               (1, 1);
+
+-- 4. Clinica
+INSERT  INTO TipoEstudio (
+  nombre,
+  requiere_turno,
+  es_externo
+)
+VALUES                   ('Radiografia', 1, 0),
+                         ('Analisis de sangre', 0, 1);
+
+INSERT  INTO Atencion (
+  id_mascota,
+  id_veterinario,
+  tipo,
+  fecha_hora,
+  orden_llegada,
+  id_turno,
+  id_turno_guardia,
+  nivel_urgencia,
+  motivo,
+  peso,
+  temperatura,
+  diagnostico
+)
+VALUES                (2, 1, 'GENERAL', '2026-09-20 11:00', 1, NULL, NULL, NULL, 'Control anual', 4.20, 38.5, 'Sana'),
+                      (1, 2, 'ESPECIALIDAD', '2026-10-01 10:00', NULL, 1, NULL, NULL, 'Soplo cardiaco', 30.50, 38.7, 'Soplo leve, control en 6 meses'),
+                      (3, 1, 'GUARDIA', '2026-10-10 23:15', NULL, NULL, 1, 'ALTA', 'Vomitos y decaimiento', 6.80, 39.8, 'Gastroenteritis aguda');
+
+INSERT  INTO Estudio (
+  id_atencion,
+  id_tipo_estudio,
+  fecha_solicitud,
+  fecha_realizacion,
+  fecha_resultado,
+  resultado
+)
+VALUES               (2, 1, '2026-10-01 10:30', '2026-10-03 09:00', '2026-10-03 12:00', 'Silueta cardiaca levemente aumentada'),
+                     (3, 2, '2026-10-10 23:40', NULL, NULL, NULL);
+
+INSERT  INTO Receta (
+  id_atencion,
+  fecha,
+  indicaciones_generales
+)
+VALUES              (2, '2026-10-01', 'Reposo y control en 6 meses'),
+                    (3, '2026-10-11', 'Dieta blanda por 5 dias');
+
+INSERT  INTO DetalleReceta (
+  id_receta,
+  id_medicamento,
+  dosis,
+  frecuencia,
+  duracion_dias
+)
+VALUES                     (1, 2, '0.5 ml', 'Cada 24 hs', 10),
+                           (2, 1, '1 comprimido', 'Cada 12 hs', 7);
+
+-- 5. Internacion y Stock
+INSERT  INTO Jaula (
+  numero,
+  tamano
+)
+VALUES             (1, 'chica'),
+                   (2, 'grande');
+
+INSERT  INTO Internacion (
+  id_atencion,
+  id_veterinario,
+  id_jaula,
+  motivo,
+  fecha_hora_ingreso,
+  fecha_hora_egreso,
+  tipo_egreso
+)
+VALUES                   (3, 1, 1, 'Deshidratacion por gastroenteritis', '2026-10-10 23:50', '2026-10-12 10:00', 'alta');
+
+INSERT  INTO EvolucionInternacion (
+  id_internacion,
+  id_empleado,
+  fecha_hora,
+  temperatura,
+  peso,
+  observaciones
+)
+VALUES                            (1, 4, '2026-10-11 08:00', 39.1, 6.70, 'Sin vomitos durante la noche'),
+                                  (1, 1, '2026-10-11 18:00', 38.6, 6.75, 'Mejora notable, comienza a comer');
+
+INSERT  INTO UsoMedicamento (
+  id_medicamento,
+  id_atencion,
+  id_evolucion,
+  dosis,
+  via_aplicacion,
+  cantidad
+)
+VALUES                      (2, 2, NULL, '0.5 ml', 'oral', 1),
+                            (1, NULL, 1, '1 comprimido', 'oral', 1);
+
+INSERT  INTO MovimientoStock (
+  id_medicamento,
+  id_empleado,
+  tipo,
+  cantidad,
+  motivo
+)
+VALUES                       (1, 3, 'ingreso', 100, 'Compra a proveedor'),
+                             (2, 3, 'ingreso', 200, 'Compra a proveedor'),
+                             (3, 3, 'ingreso', 30, 'Compra a proveedor'),
+                             (1, 3, 'ajuste', -2, 'Vencimiento');
