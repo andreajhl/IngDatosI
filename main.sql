@@ -21,6 +21,8 @@ GO
 -- 2. Tablas de Pacientes
 CREATE TABLE Dueno (
   id_dueno  INT           IDENTITY (1, 1) NOT NULL,
+  nombre    VARCHAR (50)  NOT NULL,
+  apellido  VARCHAR (50)  NOT NULL,
   dni       VARCHAR (20)  NOT NULL UNIQUE,
   telefono  VARCHAR (30)  NOT NULL,
   email     VARCHAR (100) NULL,
@@ -44,13 +46,16 @@ CREATE TABLE Raza (
 );
 
 CREATE TABLE Mascota (
-  id_mascota       INT      IDENTITY (1, 1) NOT NULL,
-  id_dueno         INT      NOT NULL,
-  id_raza          INT      NOT NULL,
-  sexo             CHAR (1) NOT NULL,
-  fecha_nacimiento DATE     NOT NULL,
-  castrado         BIT      DEFAULT 0 NOT NULL,
-  fecha_baja       DATE     NULL,
+  id_mascota       INT           IDENTITY (1, 1) NOT NULL,
+  id_dueno         INT           NOT NULL,
+  id_raza          INT           NOT NULL,
+  nombre           VARCHAR (50)  NOT NULL,
+  sexo             CHAR (1)      NOT NULL,
+  fecha_nacimiento DATE          NOT NULL,
+  castrado         BIT           DEFAULT 0 NOT NULL,
+  fecha_baja       DATE          NULL,
+  causa_baja       VARCHAR (200) NULL,
+  eutanasia        BIT           DEFAULT 0 NOT NULL,
   PRIMARY KEY (id_mascota),
   CONSTRAINT CK_Mascota_sexo CHECK (sexo IN ('M', 'H')),
   CONSTRAINT CK_Mascota_fecha_nacimiento CHECK (fecha_nacimiento <= CAST (getdate() AS DATE)),
@@ -68,8 +73,10 @@ CREATE TABLE Alergia (
 );
 
 CREATE TABLE MascotaAlergia (
-  id_mascota INT NOT NULL,
-  id_alergia INT NOT NULL,
+  id_mascota      INT           NOT NULL,
+  id_alergia      INT           NOT NULL,
+  observaciones   VARCHAR (200) NULL,
+  fecha_deteccion DATE          NULL,
   PRIMARY KEY (id_mascota, id_alergia)
 );
 
