@@ -752,3 +752,178 @@ VALUES                       (1, 3, 'ingreso', 100, 'Compra a proveedor'),
                              (2, 3, 'ingreso', 200, 'Compra a proveedor'),
                              (3, 3, 'ingreso', 30, 'Compra a proveedor'),
                              (1, 3, 'ajuste', -2, 'Vencimiento');
+
+
+GO
+------------------------------------------------------------------------
+----------------------------------- Vistas --------------------------------------
+------------------------------------------------------------------------------------
+-- Mascota con su dueño, sin dni, telefono ni direccion
+CREATE OR ALTER VIEW vw_mascota_dueno
+AS
+SELECT m.nombre AS Mascota,
+       e.nombre AS Especie,
+       r.nombre AS Raza,
+       m.sexo AS Sexo,
+       CASE WHEN m.castrado = 1 THEN 'Si' ELSE 'No' END AS Castrado,
+       CASE WHEN m.fecha_baja IS NULL THEN 'Activa' ELSE 'Baja' END AS Estado,
+       CONCAT(d.nombre, ' ', d.apellido) AS 'Dueño',
+       d.email AS Email
+FROM   Mascota AS m
+       INNER JOIN
+       Raza AS r
+       ON r.id_raza = m.id_raza
+       INNER JOIN
+       Especie AS e
+       ON e.id_especie = r.id_especie
+       INNER JOIN
+       Dueno AS d
+       ON d.id_dueno = m.id_dueno;
+
+
+GO
+------------------------------------------------------------------------------------
+----------------------------------- Funciones --------------------------------------
+------------------------------------------------------------------------------------
+-- 1 si la mascota existe y no estaba de baja en @fecha, si no 0.
+CREATE OR ALTER FUNCTION fn_mascota_activa (
+  @id_mascota INT,
+  @fecha DATE
+)
+RETURNS BIT
+AS
+BEGIN
+  IF EXISTS (SELECT 1
+             FROM   Mascota
+             WHERE  id_mascota = @id_mascota
+                    AND (fecha_baja IS NULL
+                         OR fecha_baja > @fecha))
+    RETURN 1;
+  RETURN 0;
+END
+
+
+GO
+------------------------------------------------------------------------------------
+------------------------------- Stored Procedure -----------------------------------
+------------------------------------------------------------------------------------
+-- Alta de mascota en un paso: si el dueño no existe lo crea.
+CREATE OR ALTER PROCEDURE sp_registrar_mascota
+  @dni VARCHAR (20),
+  @nombre VARCHAR (50),
+  @apellido VARCHAR (50),
+  @telefono VARCHAR (30),
+  @email VARCHAR (100)=NULL,
+  @direccion VARCHAR (200)=NULL,
+  @nombre_mascota VARCHAR (50),
+  @id_raza INT,
+  @sexo CHAR (1),
+  @fecha_nacimiento DATE,
+  @castrado BIT=0
+AS
+BEGIN
+  SET XACT_ABORT ON;
+  BEGIN TRY
+    DECLARE @id_dueno AS INT;
+    BEGIN TRANSACTION;
+    SELECT @id_dueno = id_dueno
+    FROM   Dueno
+    WHERE  dni = @dni;
+    IF @id_dueno IS NULL
+      BEGIN
+        INSERT  INTO Dueno (
+          dni,
+          nombre,
+          apellido,
+          telefono,
+          email,
+          direccion
+        )
+        VALUES             (@dni, @nombre, @apellido, @telefono, @email, @direccion);
+        SET @id_dueno = SCOPE_IDENTITY();
+      END
+    INSERT  INTO Mascota (
+      id_dueno,
+      id_raza,
+      nombre,
+      sexo,
+      fecha_nacimiento,
+      castrado
+    )
+    VALUES               (@id_dueno, @id_raza, @nombre_mascota, @sexo, @fecha_nacimiento, @castrado);
+    COMMIT TRANSACTION;
+  END TRY
+  BEGIN CATCH
+    IF @@TRANCOUNT > 0
+      ROLLBACK;
+    THROW;
+  END CATCH
+END
+
+
+GO
+-- Registra la baja (fallecimiento) de una mascota registrada.
+CREATE OR ALTER PROCEDURE sp_baja_mascota
+  @id_mascota INT,
+  @fecha_baja DATE=NULL
+AS
+BEGIN
+  SET XACT_ABORT ON;
+  BEGIN TRY
+    IF @fecha_baja IS NULL
+      BEGIN
+        SET @fecha_baja = CAST (GETDATE() AS DATE);
+      END
+    IF NOT EXISTS (SELECT 1
+                   FROM   Masota
+                   WHERE  id_mascota = @id_mascota)
+      THROW 50000, 'La mascota no existe', 1;
+    IF EXISTS (SELECT 1
+               FROM   Masota
+               WHERE  id_mascota = @id_mascota
+                      AND fecha_baja IS NOT NULL)
+      THROW 50000, 'La mascota ya está dada de baja', 1;
+    BEGIN TRANSACTION;
+    UPDATE Mascota
+    SET    fecha_baja = @fecha_baja
+    WHERE  id_mascota = @id_mascota;
+    COMMIT TRANSACTION;
+  END TRY
+  BEGIN CATCH
+    IF @@TRANCOUNT > 0
+      ROLLBACK;
+    THROW;
+  END CATCH
+END
+
+
+GO
+------------------------------------------------------------------------------------
+------------------------------------- Trigger --------------------------------------
+------------------------------------------------------------------------------------
+-- Al dar de baja una mascota: cancela sus turnos pendientes y cierra su internación como fallecida
+CREATE OR ALTER TRIGGER tr_mascota_baja
+  ON Mascota
+  AFTER UPDATE
+  AS BEGIN
+       UPDATE t
+       SET    t.estado = 'cancelado'
+       FROM   Turno AS t
+              INNER JOIN
+              inserted AS n
+              ON n.id_mascota = t.id_mascota
+       WHERE  t.estado = 'pendiente'
+              AND n.fecha_baja IS NOT NULL;
+       UPDATE i
+       SET    i.fecha_hora_egreso = GETDATE(),
+              i.tipo_egreso       = 'fallecida'
+       FROM   Internacion AS i
+              INNER JOIN
+              Atencion AS a
+              ON a.id_atencion = i.id_atencion
+              INNER JOIN
+              inserted AS n
+              ON n.id_mascota = a.id_mascota
+       WHERE  i.fecha_hora_egreso IS NULL
+              AND n.fecha_baja IS NOT NULL;
+     END
