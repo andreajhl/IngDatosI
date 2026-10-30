@@ -752,8 +752,6 @@ VALUES                       (1, 3, 'ingreso', 100, 'Compra a proveedor'),
                              (2, 3, 'ingreso', 200, 'Compra a proveedor'),
                              (3, 3, 'ingreso', 30, 'Compra a proveedor'),
                              (1, 3, 'ajuste', -2, 'Vencimiento');
-
-
 GO
 ------------------------------------------------------------------------
 ----------------------------------- Vistas --------------------------------------
@@ -875,11 +873,11 @@ BEGIN
         SET @fecha_baja = CAST (GETDATE() AS DATE);
       END
     IF NOT EXISTS (SELECT 1
-                   FROM   Masota
+                   FROM   Mascota
                    WHERE  id_mascota = @id_mascota)
       THROW 50000, 'La mascota no existe', 1;
     IF EXISTS (SELECT 1
-               FROM   Masota
+               FROM   Mascota
                WHERE  id_mascota = @id_mascota
                       AND fecha_baja IS NOT NULL)
       THROW 50000, 'La mascota ya está dada de baja', 1;
