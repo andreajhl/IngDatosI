@@ -925,3 +925,166 @@ CREATE OR ALTER TRIGGER tr_mascota_baja
        WHERE  i.fecha_hora_egreso IS NULL
               AND n.fecha_baja IS NOT NULL;
      END
+     GO
+CREATE OR ALTER FUNCTION dbo.fn_historia_clinica (@id_mascota INT)
+RETURNS TABLE
+AS
+RETURN (
+  SELECT a.fecha_hora AS fecha, 'Atencion' AS tipo_evento, a.diagnostico AS detalle,
+         e.apellido + ', ' + e.nombre AS veterinario
+  FROM Atencion a
+       JOIN Empleado e ON e.id_empleado = a.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+
+  UNION ALL
+
+  SELECT es.fecha_solicitud, 'Estudio', te.nombre + ': ' + ISNULL(es.resultado, 'sin resultado'),
+         e.apellido + ', ' + e.nombre
+  FROM Estudio es
+       JOIN Atencion a     ON a.id_atencion = es.id_atencion
+       JOIN TipoEstudio te ON te.id_tipo_estudio = es.id_tipo_estudio
+       JOIN Empleado e     ON e.id_empleado = a.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+
+  UNION ALL
+
+  SELECT i.fecha_hora_ingreso, 'Internacion', ISNULL(i.motivo, 'sin motivo') + ' - ' + ISNULL(i.tipo_egreso, 'en curso'),
+         e.apellido + ', ' + e.nombre
+  FROM Internacion i
+       JOIN Atencion a ON a.id_atencion = i.id_atencion
+       JOIN Empleado e ON e.id_empleado = i.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+);
+
+
+GO
+CREATE OR ALTER VIEW dbo.vw_internaciones_activas
+AS
+SELECT m.nombre AS mascota, es.nombre AS especie, j.numero AS numero_jaula,
+       e.apellido + ', ' + e.nombre AS veterinario, i.fecha_hora_ingreso AS ingreso,
+       DATEDIFF(DAY, i.fecha_hora_ingreso, GETDATE()) AS dias_internado, i.motivo
+FROM Internacion i
+     JOIN Atencion a ON a.id_atencion = i.id_atencion
+     JOIN Mascota m  ON m.id_mascota = a.id_mascota
+     JOIN Raza r     ON r.id_raza = m.id_raza
+     JOIN Especie es ON es.id_especie = r.id_especie
+     JOIN Jaula j    ON j.id_jaula = i.id_jaula
+     JOIN Empleado e ON e.id_empleado = i.id_veterinario
+WHERE i.fecha_hora_egreso IS NULL;
+
+
+GO
+CREATE UNIQUE INDEX ux_internacion_jaula_abierta
+  ON Internacion (id_jaula)
+  WHERE fecha_hora_egreso IS NULL;
+
+
+GO
+CREATE OR ALTER PROCEDURE dbo.sp_internar_mascota
+  @id_atencion INT, @id_veterinario INT, @id_jaula INT, @motivo VARCHAR (500)
+AS
+BEGIN
+  BEGIN TRY
+    DECLARE @id_mascota INT = (SELECT id_mascota FROM Atencion WHERE id_atencion = @id_atencion);
+
+    IF EXISTS (SELECT 1 FROM Internacion WHERE id_jaula = @id_jaula AND fecha_hora_egreso IS NULL)
+      THROW 50000, 'La jaula esta ocupada.', 1;
+
+    IF EXISTS (SELECT 1
+               FROM Internacion i JOIN Atencion a ON a.id_atencion = i.id_atencion
+               WHERE a.id_mascota = @id_mascota AND i.fecha_hora_egreso IS NULL)
+      THROW 50000, 'La mascota ya esta internada.', 1;
+
+    IF dbo.fn_mascota_activa(@id_mascota, CAST(GETDATE() AS DATE)) = 0
+      THROW 50000, 'La mascota esta de baja.', 1;
+
+    INSERT INTO Internacion (id_atencion, id_veterinario, id_jaula, motivo, fecha_hora_ingreso)
+    VALUES (@id_atencion, @id_veterinario, @id_jaula, @motivo, GETDATE());
+  END TRY
+  BEGIN CATCH
+    THROW;
+  END CATCH
+END;
+
+
+GO
+CREATE OR ALTER PROCEDURE dbo.sp_egresar_internacion
+  @id_internacion INT, @tipo_egreso VARCHAR (10)
+AS
+BEGIN
+  BEGIN TRY
+    IF NOT EXISTS (SELECT 1 FROM Internacion WHERE id_internacion = @id_internacion)
+      THROW 50000, 'La internacion no existe.', 1;
+
+    IF EXISTS (SELECT 1 FROM Internacion WHERE id_internacion = @id_internacion AND fecha_hora_egreso IS NOT NULL)
+      THROW 50000, 'La internacion ya esta cerrada.', 1;
+
+    BEGIN TRANSACTION;
+
+    UPDATE Internacion
+    SET fecha_hora_egreso = GETDATE(), tipo_egreso = @tipo_egreso
+    WHERE id_internacion = @id_internacion;
+
+    IF @tipo_egreso = 'fallecida'
+      UPDATE Mascota
+      SET fecha_baja = CAST(GETDATE() AS DATE)
+      WHERE id_mascota = (SELECT a.id_mascota
+                          FROM Internacion i JOIN Atencion a ON a.id_atencion = i.id_atencion
+                          WHERE i.id_internacion = @id_internacion);
+
+    COMMIT TRANSACTION;
+  END TRY
+  BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    THROW;
+  END CATCH
+END;
+GO
+
+
+GO
+DECLARE @id INT = 3;
+
+SELECT *
+FROM dbo.fn_historia_clinica(@id)
+ORDER BY fecha;
+
+
+GO
+DECLARE @desde DATE = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
+DECLARE @hasta DATE = DATEADD(MONTH, 1, @desde);
+
+SELECT e.apellido + ', ' + e.nombre AS veterinario, a.tipo, COUNT(*) AS cantidad_atenciones
+FROM Atencion a
+     JOIN Empleado e ON e.id_empleado = a.id_veterinario
+WHERE a.fecha_hora >= @desde AND a.fecha_hora < @hasta
+GROUP BY e.id_empleado, e.apellido, e.nombre, a.tipo
+ORDER BY e.apellido, e.nombre, a.tipo;
+
+
+GO
+DECLARE @desde DATE = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
+DECLARE @hasta DATE = DATEADD(MONTH, 1, @desde);
+DECLARE @n INT = 2;
+
+SELECT e.apellido + ', ' + e.nombre AS veterinario, COUNT(*) AS cantidad_guardias
+FROM TurnoGuardiaVeterinario tgv
+     JOIN TurnoGuardia tg ON tg.id_turno_guardia = tgv.id_turno_guardia
+     JOIN Empleado e      ON e.id_empleado = tgv.id_veterinario
+WHERE tg.fecha_inicio >= @desde AND tg.fecha_inicio < @hasta
+GROUP BY e.id_empleado, e.apellido, e.nombre
+HAVING COUNT(*) > @n
+ORDER BY cantidad_guardias DESC;
+
+
+GO
+DECLARE @desde DATE = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
+DECLARE @hasta DATE = DATEADD(MONTH, 1, @desde);
+
+SELECT TOP 5 m.nombre_comercial, SUM(u.cantidad) AS cantidad_usada
+FROM UsoMedicamento u
+     JOIN Medicamento m ON m.id_medicamento = u.id_medicamento
+WHERE u.fecha_hora >= @desde AND u.fecha_hora < @hasta
+GROUP BY m.id_medicamento, m.nombre_comercial
+ORDER BY cantidad_usada DESC;
+GO
