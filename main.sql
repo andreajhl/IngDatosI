@@ -780,6 +780,22 @@ FROM   Mascota AS m
 
 
 GO
+CREATE OR ALTER VIEW dbo.vw_internaciones_activas
+AS
+SELECT m.nombre AS mascota, es.nombre AS especie, j.numero AS numero_jaula,
+       e.apellido + ', ' + e.nombre AS veterinario, i.fecha_hora_ingreso AS ingreso,
+       DATEDIFF(DAY, i.fecha_hora_ingreso, GETDATE()) AS dias_internado, i.motivo
+FROM Internacion i
+     JOIN Atencion a ON a.id_atencion = i.id_atencion
+     JOIN Mascota m  ON m.id_mascota = a.id_mascota
+     JOIN Raza r     ON r.id_raza = m.id_raza
+     JOIN Especie es ON es.id_especie = r.id_especie
+     JOIN Jaula j    ON j.id_jaula = i.id_jaula
+     JOIN Empleado e ON e.id_empleado = i.id_veterinario
+WHERE i.fecha_hora_egreso IS NULL;
+
+
+GO
 ------------------------------------------------------------------------------------
 ----------------------------------- Funciones --------------------------------------
 ------------------------------------------------------------------------------------
@@ -799,6 +815,38 @@ BEGIN
     RETURN 1;
   RETURN 0;
 END
+
+
+GO
+CREATE OR ALTER FUNCTION dbo.fn_historia_clinica (@id_mascota INT)
+RETURNS TABLE
+AS
+RETURN (
+  SELECT a.fecha_hora AS fecha, 'Atencion' AS tipo_evento, a.diagnostico AS detalle,
+         e.apellido + ', ' + e.nombre AS veterinario
+  FROM Atencion a
+       JOIN Empleado e ON e.id_empleado = a.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+
+  UNION ALL
+
+  SELECT es.fecha_solicitud, 'Estudio', te.nombre + ': ' + ISNULL(es.resultado, 'sin resultado'),
+         e.apellido + ', ' + e.nombre
+  FROM Estudio es
+       JOIN Atencion a     ON a.id_atencion = es.id_atencion
+       JOIN TipoEstudio te ON te.id_tipo_estudio = es.id_tipo_estudio
+       JOIN Empleado e     ON e.id_empleado = a.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+
+  UNION ALL
+
+  SELECT i.fecha_hora_ingreso, 'Internacion', ISNULL(i.motivo, 'sin motivo') + ' - ' + ISNULL(i.tipo_egreso, 'en curso'),
+         e.apellido + ', ' + e.nombre
+  FROM Internacion i
+       JOIN Atencion a ON a.id_atencion = i.id_atencion
+       JOIN Empleado e ON e.id_empleado = i.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+);
 
 
 GO
@@ -896,84 +944,6 @@ END
 
 
 GO
-------------------------------------------------------------------------------------
-------------------------------------- Trigger --------------------------------------
-------------------------------------------------------------------------------------
--- Al dar de baja una mascota: cancela sus turnos pendientes y cierra su internación como fallecida
-CREATE OR ALTER TRIGGER tr_mascota_baja
-  ON Mascota
-  AFTER UPDATE
-  AS BEGIN
-       UPDATE t
-       SET    t.estado = 'cancelado'
-       FROM   Turno AS t
-              INNER JOIN
-              inserted AS n
-              ON n.id_mascota = t.id_mascota
-       WHERE  t.estado = 'pendiente'
-              AND n.fecha_baja IS NOT NULL;
-       UPDATE i
-       SET    i.fecha_hora_egreso = GETDATE(),
-              i.tipo_egreso       = 'fallecida'
-       FROM   Internacion AS i
-              INNER JOIN
-              Atencion AS a
-              ON a.id_atencion = i.id_atencion
-              INNER JOIN
-              inserted AS n
-              ON n.id_mascota = a.id_mascota
-       WHERE  i.fecha_hora_egreso IS NULL
-              AND n.fecha_baja IS NOT NULL;
-     END
-     GO
-CREATE OR ALTER FUNCTION dbo.fn_historia_clinica (@id_mascota INT)
-RETURNS TABLE
-AS
-RETURN (
-  SELECT a.fecha_hora AS fecha, 'Atencion' AS tipo_evento, a.diagnostico AS detalle,
-         e.apellido + ', ' + e.nombre AS veterinario
-  FROM Atencion a
-       JOIN Empleado e ON e.id_empleado = a.id_veterinario
-  WHERE a.id_mascota = @id_mascota
-
-  UNION ALL
-
-  SELECT es.fecha_solicitud, 'Estudio', te.nombre + ': ' + ISNULL(es.resultado, 'sin resultado'),
-         e.apellido + ', ' + e.nombre
-  FROM Estudio es
-       JOIN Atencion a     ON a.id_atencion = es.id_atencion
-       JOIN TipoEstudio te ON te.id_tipo_estudio = es.id_tipo_estudio
-       JOIN Empleado e     ON e.id_empleado = a.id_veterinario
-  WHERE a.id_mascota = @id_mascota
-
-  UNION ALL
-
-  SELECT i.fecha_hora_ingreso, 'Internacion', ISNULL(i.motivo, 'sin motivo') + ' - ' + ISNULL(i.tipo_egreso, 'en curso'),
-         e.apellido + ', ' + e.nombre
-  FROM Internacion i
-       JOIN Atencion a ON a.id_atencion = i.id_atencion
-       JOIN Empleado e ON e.id_empleado = i.id_veterinario
-  WHERE a.id_mascota = @id_mascota
-);
-
-
-GO
-CREATE OR ALTER VIEW dbo.vw_internaciones_activas
-AS
-SELECT m.nombre AS mascota, es.nombre AS especie, j.numero AS numero_jaula,
-       e.apellido + ', ' + e.nombre AS veterinario, i.fecha_hora_ingreso AS ingreso,
-       DATEDIFF(DAY, i.fecha_hora_ingreso, GETDATE()) AS dias_internado, i.motivo
-FROM Internacion i
-     JOIN Atencion a ON a.id_atencion = i.id_atencion
-     JOIN Mascota m  ON m.id_mascota = a.id_mascota
-     JOIN Raza r     ON r.id_raza = m.id_raza
-     JOIN Especie es ON es.id_especie = r.id_especie
-     JOIN Jaula j    ON j.id_jaula = i.id_jaula
-     JOIN Empleado e ON e.id_empleado = i.id_veterinario
-WHERE i.fecha_hora_egreso IS NULL;
-
-
-GO
 CREATE UNIQUE INDEX ux_internacion_jaula_abierta
   ON Internacion (id_jaula)
   WHERE fecha_hora_egreso IS NULL;
@@ -1039,52 +1009,35 @@ BEGIN
     THROW;
   END CATCH
 END;
-GO
 
 
 GO
-DECLARE @id INT = 3;
-
-SELECT *
-FROM dbo.fn_historia_clinica(@id)
-ORDER BY fecha;
-
-
-GO
-DECLARE @desde DATE = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
-DECLARE @hasta DATE = DATEADD(MONTH, 1, @desde);
-
-SELECT e.apellido + ', ' + e.nombre AS veterinario, a.tipo, COUNT(*) AS cantidad_atenciones
-FROM Atencion a
-     JOIN Empleado e ON e.id_empleado = a.id_veterinario
-WHERE a.fecha_hora >= @desde AND a.fecha_hora < @hasta
-GROUP BY e.id_empleado, e.apellido, e.nombre, a.tipo
-ORDER BY e.apellido, e.nombre, a.tipo;
-
-
-GO
-DECLARE @desde DATE = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
-DECLARE @hasta DATE = DATEADD(MONTH, 1, @desde);
-DECLARE @n INT = 2;
-
-SELECT e.apellido + ', ' + e.nombre AS veterinario, COUNT(*) AS cantidad_guardias
-FROM TurnoGuardiaVeterinario tgv
-     JOIN TurnoGuardia tg ON tg.id_turno_guardia = tgv.id_turno_guardia
-     JOIN Empleado e      ON e.id_empleado = tgv.id_veterinario
-WHERE tg.fecha_inicio >= @desde AND tg.fecha_inicio < @hasta
-GROUP BY e.id_empleado, e.apellido, e.nombre
-HAVING COUNT(*) > @n
-ORDER BY cantidad_guardias DESC;
-
-
-GO
-DECLARE @desde DATE = DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);
-DECLARE @hasta DATE = DATEADD(MONTH, 1, @desde);
-
-SELECT TOP 5 m.nombre_comercial, SUM(u.cantidad) AS cantidad_usada
-FROM UsoMedicamento u
-     JOIN Medicamento m ON m.id_medicamento = u.id_medicamento
-WHERE u.fecha_hora >= @desde AND u.fecha_hora < @hasta
-GROUP BY m.id_medicamento, m.nombre_comercial
-ORDER BY cantidad_usada DESC;
-GO
+------------------------------------------------------------------------------------
+------------------------------------- Trigger --------------------------------------
+------------------------------------------------------------------------------------
+-- Al dar de baja una mascota: cancela sus turnos pendientes y cierra su internación como fallecida
+CREATE OR ALTER TRIGGER tr_mascota_baja
+  ON Mascota
+  AFTER UPDATE
+  AS BEGIN
+       UPDATE t
+       SET    t.estado = 'cancelado'
+       FROM   Turno AS t
+              INNER JOIN
+              inserted AS n
+              ON n.id_mascota = t.id_mascota
+       WHERE  t.estado = 'pendiente'
+              AND n.fecha_baja IS NOT NULL;
+       UPDATE i
+       SET    i.fecha_hora_egreso = GETDATE(),
+              i.tipo_egreso       = 'fallecida'
+       FROM   Internacion AS i
+              INNER JOIN
+              Atencion AS a
+              ON a.id_atencion = i.id_atencion
+              INNER JOIN
+              inserted AS n
+              ON n.id_mascota = a.id_mascota
+       WHERE  i.fecha_hora_egreso IS NULL
+              AND n.fecha_baja IS NOT NULL;
+     END
