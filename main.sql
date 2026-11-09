@@ -235,15 +235,6 @@ CREATE TABLE internacion.Jaula (
 
 --
 
-CREATE TABLE Jaula (
-  id_jaula INT          IDENTITY (1, 1) PRIMARY KEY,
-  numero   INT          NOT NULL,
-  tamano   VARCHAR (10) NOT NULL,
-  activa   BIT          DEFAULT 1 NOT NULL,
-  CONSTRAINT UQ_jaula_numero UNIQUE (numero),
-  CONSTRAINT CK_jaula_tamano CHECK (tamano IN ('chica', 'mediana', 'grande'))
-);
-
 CREATE TABLE Internacion (
   id_internacion     INT           IDENTITY (1, 1) PRIMARY KEY,
   id_atencion        INT           NOT NULL,
@@ -796,6 +787,22 @@ FROM   Mascota AS m
 
 
 GO
+CREATE OR ALTER VIEW dbo.vw_internaciones_activas
+AS
+SELECT m.nombre AS mascota, es.nombre AS especie, j.numero AS numero_jaula,
+       e.apellido + ', ' + e.nombre AS veterinario, i.fecha_hora_ingreso AS ingreso,
+       DATEDIFF(DAY, i.fecha_hora_ingreso, GETDATE()) AS dias_internado, i.motivo
+FROM Internacion i
+     JOIN Atencion a ON a.id_atencion = i.id_atencion
+     JOIN Mascota m  ON m.id_mascota = a.id_mascota
+     JOIN Raza r     ON r.id_raza = m.id_raza
+     JOIN Especie es ON es.id_especie = r.id_especie
+     JOIN Jaula j    ON j.id_jaula = i.id_jaula
+     JOIN Empleado e ON e.id_empleado = i.id_veterinario
+WHERE i.fecha_hora_egreso IS NULL;
+
+
+GO
 ------------------------------------------------------------------------------------
 ----------------------------------- Funciones --------------------------------------
 ------------------------------------------------------------------------------------
@@ -821,7 +828,42 @@ GO
 
 ------------------------------------------------------------------------------------
 
--- 1 si el veterinario esta libre, 0 si tiene un turno a menos de 30 min
+CREATE OR ALTER FUNCTION dbo.fn_historia_clinica (@id_mascota INT)
+RETURNS TABLE
+AS
+RETURN (
+  SELECT a.fecha_hora AS fecha, 'Atencion' AS tipo_evento, a.diagnostico AS detalle,
+         e.apellido + ', ' + e.nombre AS veterinario
+  FROM Atencion a
+       JOIN Empleado e ON e.id_empleado = a.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+
+  UNION ALL
+
+  SELECT es.fecha_solicitud, 'Estudio', te.nombre + ': ' + ISNULL(es.resultado, 'sin resultado'),
+         e.apellido + ', ' + e.nombre
+  FROM Estudio es
+       JOIN Atencion a     ON a.id_atencion = es.id_atencion
+       JOIN TipoEstudio te ON te.id_tipo_estudio = es.id_tipo_estudio
+       JOIN Empleado e     ON e.id_empleado = a.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+
+  UNION ALL
+
+  SELECT i.fecha_hora_ingreso, 'Internacion', ISNULL(i.motivo, 'sin motivo') + ' - ' + ISNULL(i.tipo_egreso, 'en curso'),
+         e.apellido + ', ' + e.nombre
+  FROM Internacion i
+       JOIN Atencion a ON a.id_atencion = i.id_atencion
+       JOIN Empleado e ON e.id_empleado = i.id_veterinario
+  WHERE a.id_mascota = @id_mascota
+);
+
+
+GO
+
+------------------------------------------------------------------------------------
+
+-- 1 si el veterinario esta libre, 0 si tiene otro turno o esta de guardia
 create or alter function fn_veterinario_libre (
     @id_veterinario int,
     @fecha_hora datetime
@@ -829,12 +871,24 @@ create or alter function fn_veterinario_libre (
 returns bit
 as
 begin
+    -- chequeamos si tiene algun turno pendiente que se pise (duran 30 min)
     if exists (
         select 1 
         from Turno 
         where id_veterinario = @id_veterinario 
           and estado = 'pendiente'
-          and abs(datediff(minute, fecha_hora, @fecha_hora)) < 30 
+          and abs(datediff(minute, fecha_hora, @fecha_hora)) < 30
+    )
+        return 0;
+
+    -- chequeamos que no este de guardia en ese horario (ni que el turno de 30 min se meta en una guardia)
+    if exists (
+        select 1
+        from TurnoGuardiaVeterinario tgv
+        inner join TurnoGuardia tg on tg.id_turno_guardia = tgv.id_turno_guardia
+        where tgv.id_veterinario = @id_veterinario
+          and @fecha_hora < tg.fecha_fin
+          and dateadd(minute, 30, @fecha_hora) > tg.fecha_inicio
     )
         return 0;
 
@@ -844,7 +898,7 @@ go
 
 ------------------------------------------------------------------------------------
 
--- asigna un turno pendiente validando mascota, especialidad y disponibilidad
+-- asigna un turno pendiente validando mascota, veterinario activo, especialidad y disponibilidad
 create or alter procedure sp_asignar_turno
     @id_mascota int,
     @id_veterinario int,
@@ -855,6 +909,15 @@ begin
     -- validaciones previas
     if dbo.fn_mascota_activa(@id_mascota, cast(@fecha_hora as date)) = 0
         throw 50000, 'La mascota no esta activa o fue dada de baja', 1;
+
+    if not exists (
+        select 1 
+        from Veterinario v
+        inner join Empleado e on e.id_empleado = v.id_veterinario
+        where v.id_veterinario = @id_veterinario 
+          and e.activo = 1
+    )
+        throw 50000, 'El veterinario no existe o no se encuentra activo', 1;
 
     if @fecha_hora < getdate()
         throw 50000, 'No se puede asignar un turno en una fecha pasada', 1;
@@ -867,7 +930,7 @@ begin
         throw 50000, 'El veterinario no cuenta con esa especialidad', 1;
 
     if dbo.fn_veterinario_libre(@id_veterinario, @fecha_hora) = 0
-        throw 50000, 'El veterinario ya esta ocupado en ese horario', 1;
+        throw 50000, 'El veterinario ya esta ocupado o de guardia en ese horario', 1;
 
     insert into Turno (fecha_hora, estado, id_mascota, id_veterinario, id_especialidad)
     values (@fecha_hora, 'pendiente', @id_mascota, @id_veterinario, @id_especialidad);
@@ -886,7 +949,9 @@ create or alter procedure sp_registrar_atencion
     @temperatura decimal(4,1) = null,
     @diagnostico varchar(500),
     @id_turno int = null,
-    @id_turno_guardia int = null
+    @id_turno_guardia int = null,
+    @orden_llegada int = null,
+    @nivel_urgencia varchar(20) = null
 as
 begin
     set xact_abort on;
@@ -910,12 +975,12 @@ begin
         begin transaction;
 
         insert into Atencion (
-            id_mascota, id_veterinario, tipo, motivo, peso, 
-            temperatura, diagnostico, id_turno, id_turno_guardia
+            id_mascota, id_veterinario, tipo, orden_llegada, id_turno, 
+            id_turno_guardia, nivel_urgencia, motivo, peso, temperatura, diagnostico
         )
         values (
-            @id_mascota, @id_veterinario, @tipo, @motivo, @peso, 
-            @temperatura, @diagnostico, @id_turno, @id_turno_guardia
+            @id_mascota, @id_veterinario, @tipo, @orden_llegada, @id_turno, 
+            @id_turno_guardia, @nivel_urgencia, @motivo, @peso, @temperatura, @diagnostico
         );
 
         -- si vino con turno, lo pasamos a atendido
@@ -944,6 +1009,8 @@ create or alter procedure sp_reasignar_turnos
     @desde datetime
 as
 begin
+    set xact_abort on;
+
     declare @id_turno int;
     declare @fecha_hora datetime;
     declare @id_especialidad int;
@@ -952,8 +1019,8 @@ begin
     declare @reasignados int = 0;
     declare @cancelados int = 0;
 
-    -- usamos cursor porque cada turno reasignado ocupa la agenda del nuevo veterinario para el siguiente
-    declare cur_turnos cursor for
+    -- usamos cursor fast_forward porque solo avanzamos hacia adelante fila por fila
+    declare cur_turnos cursor fast_forward for
         select id_turno, fecha_hora, id_especialidad
         from Turno
         where id_veterinario = @id_veterinario
@@ -961,56 +1028,71 @@ begin
           and fecha_hora >= @desde
         order by fecha_hora asc;
 
-    open cur_turnos;
-    fetch next from cur_turnos into @id_turno, @fecha_hora, @id_especialidad;
+    begin try
+        -- envolvemos todo el recorrido en una transaccion para que sea todo o nada
+        begin transaction;
 
-    while @@fetch_status = 0
-    begin
-        set @nuevo_vet = null;
-
-        -- buscamos otro veterinario activo, con la misma especialidad (si aplica) y que este libre
-        select top 1 @nuevo_vet = v.id_veterinario
-        from Veterinario v
-        inner join Empleado e on e.id_empleado = v.id_veterinario
-        where e.activo = 1
-          and v.id_veterinario <> @id_veterinario
-          and (
-              @id_especialidad is null 
-              or exists (
-                  select 1 from VeterinarioEspecialidad ve 
-                  where ve.id_veterinario = v.id_veterinario 
-                    and ve.id_especialidad = @id_especialidad
-              )
-          )
-          and dbo.fn_veterinario_libre(v.id_veterinario, @fecha_hora) = 1;
-
-        if @nuevo_vet is not null
-        begin
-            update Turno 
-            set id_veterinario = @nuevo_vet 
-            where id_turno = @id_turno;
-
-            set @reasignados = @reasignados + 1;
-        end
-        else
-        begin
-            -- si no hay nadie libre se cancela
-            update Turno 
-            set estado = 'cancelado' 
-            where id_turno = @id_turno;
-
-            set @cancelados = @cancelados + 1;
-        end
-
+        open cur_turnos;
         fetch next from cur_turnos into @id_turno, @fecha_hora, @id_especialidad;
-    end
 
-    close cur_turnos;
-    deallocate cur_turnos;
+        while @@fetch_status = 0
+        begin
+            set @nuevo_vet = null;
 
-    select @reasignados as turnos_reasignados, @cancelados as turnos_cancelados;
+            -- buscamos otro veterinario activo, con la misma especialidad (si aplica) y libre
+            select top 1 @nuevo_vet = v.id_veterinario
+            from Veterinario v
+            inner join Empleado e on e.id_empleado = v.id_veterinario
+            where e.activo = 1
+              and v.id_veterinario <> @id_veterinario
+              and (
+                  @id_especialidad is null 
+                  or exists (
+                      select 1 from VeterinarioEspecialidad ve 
+                      where ve.id_veterinario = v.id_veterinario 
+                        and ve.id_especialidad = @id_especialidad
+                  )
+              )
+              and dbo.fn_veterinario_libre(v.id_veterinario, @fecha_hora) = 1;
+
+            if @nuevo_vet is not null
+            begin
+                update Turno 
+                set id_veterinario = @nuevo_vet 
+                where id_turno = @id_turno;
+
+                set @reasignados = @reasignados + 1;
+            end
+            else
+            begin
+                -- si no hay nadie libre se cancela
+                update Turno 
+                set estado = 'cancelado' 
+                where id_turno = @id_turno;
+
+                set @cancelados = @cancelados + 1;
+            end
+
+            fetch next from cur_turnos into @id_turno, @fecha_hora, @id_especialidad;
+        end
+
+        close cur_turnos;
+        deallocate cur_turnos;
+
+        commit transaction;
+
+        select @reasignados as turnos_reasignados, @cancelados as turnos_cancelados;
+    end try
+    begin catch
+        -- si fallo a mitad de camino, revertimos todos los turnos que se hayan llegado a tocar
+        if @@trancount > 0
+            rollback transaction;
+
+        throw;
+    end catch
 end
 go
+
 ------------------------------------------------------------------------------------
 ------------------------------- Stored Procedure -----------------------------------
 ------------------------------------------------------------------------------------
@@ -1102,6 +1184,74 @@ BEGIN
     THROW;
   END CATCH
 END
+
+
+GO
+CREATE UNIQUE INDEX ux_internacion_jaula_abierta
+  ON Internacion (id_jaula)
+  WHERE fecha_hora_egreso IS NULL;
+
+
+GO
+CREATE OR ALTER PROCEDURE dbo.sp_internar_mascota
+  @id_atencion INT, @id_veterinario INT, @id_jaula INT, @motivo VARCHAR (500)
+AS
+BEGIN
+  BEGIN TRY
+    DECLARE @id_mascota INT = (SELECT id_mascota FROM Atencion WHERE id_atencion = @id_atencion);
+
+    IF EXISTS (SELECT 1 FROM Internacion WHERE id_jaula = @id_jaula AND fecha_hora_egreso IS NULL)
+      THROW 50000, 'La jaula esta ocupada.', 1;
+
+    IF EXISTS (SELECT 1
+               FROM Internacion i JOIN Atencion a ON a.id_atencion = i.id_atencion
+               WHERE a.id_mascota = @id_mascota AND i.fecha_hora_egreso IS NULL)
+      THROW 50000, 'La mascota ya esta internada.', 1;
+
+    IF dbo.fn_mascota_activa(@id_mascota, CAST(GETDATE() AS DATE)) = 0
+      THROW 50000, 'La mascota esta de baja.', 1;
+
+    INSERT INTO Internacion (id_atencion, id_veterinario, id_jaula, motivo, fecha_hora_ingreso)
+    VALUES (@id_atencion, @id_veterinario, @id_jaula, @motivo, GETDATE());
+  END TRY
+  BEGIN CATCH
+    THROW;
+  END CATCH
+END;
+
+
+GO
+CREATE OR ALTER PROCEDURE dbo.sp_egresar_internacion
+  @id_internacion INT, @tipo_egreso VARCHAR (10)
+AS
+BEGIN
+  BEGIN TRY
+    IF NOT EXISTS (SELECT 1 FROM Internacion WHERE id_internacion = @id_internacion)
+      THROW 50000, 'La internacion no existe.', 1;
+
+    IF EXISTS (SELECT 1 FROM Internacion WHERE id_internacion = @id_internacion AND fecha_hora_egreso IS NOT NULL)
+      THROW 50000, 'La internacion ya esta cerrada.', 1;
+
+    BEGIN TRANSACTION;
+
+    UPDATE Internacion
+    SET fecha_hora_egreso = GETDATE(), tipo_egreso = @tipo_egreso
+    WHERE id_internacion = @id_internacion;
+
+    IF @tipo_egreso = 'fallecida'
+      UPDATE Mascota
+      SET fecha_baja = CAST(GETDATE() AS DATE)
+      WHERE id_mascota = (SELECT a.id_mascota
+                          FROM Internacion i JOIN Atencion a ON a.id_atencion = i.id_atencion
+                          WHERE i.id_internacion = @id_internacion);
+
+    COMMIT TRANSACTION;
+  END TRY
+  BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    THROW;
+  END CATCH
+END;
 
 
 GO
