@@ -1110,7 +1110,7 @@ FROM Internacion i
      JOIN Mascota m  ON m.id_mascota = a.id_mascota
      JOIN Raza r     ON r.id_raza = m.id_raza
      JOIN Especie es ON es.id_especie = r.id_especie
-     JOIN Jaula j    ON j.id_jaula = i.id_jaula
+     JOIN internacion.Jaula j    ON j.id_jaula = i.id_jaula
      JOIN Empleado e ON e.id_empleado = i.id_veterinario
 WHERE i.fecha_hora_egreso IS NULL;
 
