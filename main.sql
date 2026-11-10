@@ -760,49 +760,7 @@ VALUES                       (1, 3, 'ingreso', 100, 'Compra a proveedor'),
                              (3, 3, 'ingreso', 30, 'Compra a proveedor'),
                              (1, 3, 'ajuste', -2, 'Vencimiento');
 GO
-------------------------------------------------------------------------
------------------------------------ Vistas --------------------------------------
-------------------------------------------------------------------------------------
--- Mascota con su dueño, sin dni, telefono ni direccion
-CREATE OR ALTER VIEW vw_mascota_dueno
-AS
-SELECT m.nombre AS Mascota,
-       e.nombre AS Especie,
-       r.nombre AS Raza,
-       m.sexo AS Sexo,
-       CASE WHEN m.castrado = 1 THEN 'Si' ELSE 'No' END AS Castrado,
-       CASE WHEN m.fecha_baja IS NULL THEN 'Activa' ELSE 'Baja' END AS Estado,
-       CONCAT(d.nombre, ' ', d.apellido) AS 'Dueño',
-       d.email AS Email
-FROM   Mascota AS m
-       INNER JOIN
-       Raza AS r
-       ON r.id_raza = m.id_raza
-       INNER JOIN
-       Especie AS e
-       ON e.id_especie = r.id_especie
-       INNER JOIN
-       Dueno AS d
-       ON d.id_dueno = m.id_dueno;
 
-
-GO
-CREATE OR ALTER VIEW dbo.vw_internaciones_activas
-AS
-SELECT m.nombre AS mascota, es.nombre AS especie, j.numero AS numero_jaula,
-       e.apellido + ', ' + e.nombre AS veterinario, i.fecha_hora_ingreso AS ingreso,
-       DATEDIFF(DAY, i.fecha_hora_ingreso, GETDATE()) AS dias_internado, i.motivo
-FROM Internacion i
-     JOIN Atencion a ON a.id_atencion = i.id_atencion
-     JOIN Mascota m  ON m.id_mascota = a.id_mascota
-     JOIN Raza r     ON r.id_raza = m.id_raza
-     JOIN Especie es ON es.id_especie = r.id_especie
-     JOIN Jaula j    ON j.id_jaula = i.id_jaula
-     JOIN Empleado e ON e.id_empleado = i.id_veterinario
-WHERE i.fecha_hora_egreso IS NULL;
-
-
-GO
 ------------------------------------------------------------------------------------
 ----------------------------------- Funciones --------------------------------------
 ------------------------------------------------------------------------------------
@@ -1093,6 +1051,87 @@ begin
 end
 go
 
+CREATE OR ALTER FUNCTION dbo.fn_stock_actual (@id_medicamento INT)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @movimientos INT = 0;
+    DECLARE @usos INT = 0;
+    DECLARE @stock INT = 0;
+
+    SELECT @movimientos = ISNULL(SUM(cantidad), 0)
+    FROM MovimientoStock
+    WHERE id_medicamento = @id_medicamento;
+
+    SELECT @usos = ISNULL(SUM(cantidad), 0)
+    FROM UsoMedicamento
+    WHERE id_medicamento = @id_medicamento;
+
+    SET @stock = @movimientos - @usos;
+
+    RETURN @stock;
+END
+GO
+      
+------------------------------------------------------------------------
+----------------------------------- Vistas --------------------------------------
+------------------------------------------------------------------------------------
+-- Mascota con su dueño, sin dni, telefono ni direccion
+CREATE OR ALTER VIEW vw_mascota_dueno
+AS
+SELECT m.nombre AS Mascota,
+       e.nombre AS Especie,
+       r.nombre AS Raza,
+       m.sexo AS Sexo,
+       CASE WHEN m.castrado = 1 THEN 'Si' ELSE 'No' END AS Castrado,
+       CASE WHEN m.fecha_baja IS NULL THEN 'Activa' ELSE 'Baja' END AS Estado,
+       CONCAT(d.nombre, ' ', d.apellido) AS 'Dueño',
+       d.email AS Email
+FROM   Mascota AS m
+       INNER JOIN
+       Raza AS r
+       ON r.id_raza = m.id_raza
+       INNER JOIN
+       Especie AS e
+       ON e.id_especie = r.id_especie
+       INNER JOIN
+       Dueno AS d
+       ON d.id_dueno = m.id_dueno;
+
+
+GO
+CREATE OR ALTER VIEW dbo.vw_internaciones_activas
+AS
+SELECT m.nombre AS mascota, es.nombre AS especie, j.numero AS numero_jaula,
+       e.apellido + ', ' + e.nombre AS veterinario, i.fecha_hora_ingreso AS ingreso,
+       DATEDIFF(DAY, i.fecha_hora_ingreso, GETDATE()) AS dias_internado, i.motivo
+FROM Internacion i
+     JOIN Atencion a ON a.id_atencion = i.id_atencion
+     JOIN Mascota m  ON m.id_mascota = a.id_mascota
+     JOIN Raza r     ON r.id_raza = m.id_raza
+     JOIN Especie es ON es.id_especie = r.id_especie
+     JOIN Jaula j    ON j.id_jaula = i.id_jaula
+     JOIN Empleado e ON e.id_empleado = i.id_veterinario
+WHERE i.fecha_hora_egreso IS NULL;
+
+
+GO
+
+CREATE OR ALTER VIEW dbo.vw_stock_medicamento
+AS
+SELECT
+    nombre_comercial AS medicamento,
+    droga,
+    dbo.fn_stock_actual(id_medicamento) AS stock_actual,
+    stock_minimo,
+    CASE
+        WHEN dbo.fn_stock_actual(id_medicamento) < stock_minimo
+        THEN N'SÍ'
+        ELSE N'NO'
+    END AS en_falta
+FROM Medicamento
+WHERE activo = 1;
+GO  
 ------------------------------------------------------------------------------------
 ------------------------------- Stored Procedure -----------------------------------
 ------------------------------------------------------------------------------------
@@ -1255,6 +1294,66 @@ END;
 
 
 GO
+
+CREATE OR ALTER PROCEDURE dbo.sp_aplicar_medicamento
+    @id_medicamento INT,
+    @cantidad INT,
+    @id_atencion INT = NULL,
+    @id_evolucion INT = NULL,
+    @dosis VARCHAR(100) = NULL,
+    @via_aplicacion VARCHAR(50) = NULL
+AS
+BEGIN
+    SET XACT_ABORT ON;
+
+    BEGIN TRY
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM Medicamento
+            WHERE id_medicamento = @id_medicamento
+            AND activo = 1
+        )
+        BEGIN
+            THROW 50000, 'El medicamento no existe o esta inactivo', 1;
+        END;
+
+        BEGIN TRANSACTION;
+
+        IF dbo.fn_stock_actual(@id_medicamento) < @cantidad
+        BEGIN
+            THROW 50000, 'Stock insuficiente', 1;
+        END;
+
+        INSERT INTO UsoMedicamento (
+            id_medicamento,
+            cantidad,
+            id_atencion,
+            id_evolucion,
+            dosis,
+            via_aplicacion
+        )
+        VALUES (
+            @id_medicamento,
+            @cantidad,
+            @id_atencion,
+            @id_evolucion,
+            @dosis,
+            @via_aplicacion
+        );
+
+        COMMIT TRANSACTION;
+    END TRY
+
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+
+        THROW;
+    END CATCH
+END
+GO
+  
 ------------------------------------------------------------------------------------
 ------------------------------------- Trigger --------------------------------------
 ------------------------------------------------------------------------------------
@@ -1284,3 +1383,70 @@ CREATE OR ALTER TRIGGER tr_mascota_baja
        WHERE  i.fecha_hora_egreso IS NULL
               AND n.fecha_baja IS NOT NULL;
      END
+GO 
+
+       
+CREATE OR ALTER TRIGGER dbo.tr_uso_medicamento_stock
+ON UsoMedicamento
+AFTER INSERT
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM inserted
+        WHERE dbo.fn_stock_actual(id_medicamento) < 0
+    )
+    BEGIN
+        THROW 50000, 'Stock insuficiente', 1;
+    END;
+END
+GO
+
+------------------------------------------------------------------------------------
+------------------------------------- Subconsultas --------------------------------------
+------------------------------------------------------------------------------------
+-- S1: Mascotas activas sin atencion en el ultimo año
+SELECT
+    m.id_mascota,
+    m.nombre
+FROM Mascota m
+WHERE (m.fecha_baja IS NULL OR m.fecha_baja > GETDATE())
+AND NOT EXISTS (
+    SELECT 1
+    FROM Atencion a
+    WHERE a.id_mascota = m.id_mascota
+    AND a.fecha_hora >= DATEADD(YEAR, -1, GETDATE())
+    AND a.fecha_hora <= GETDATE()
+);
+
+
+-- S2: Medicamentos bajo el stock minimo
+SELECT
+    m.id_medicamento,
+    m.nombre_comercial,
+    m.stock_minimo
+FROM Medicamento m
+WHERE (
+    SELECT ISNULL(SUM(ms.cantidad), 0)
+    FROM MovimientoStock ms
+    WHERE ms.id_medicamento = m.id_medicamento
+) - (
+    SELECT ISNULL(SUM(um.cantidad), 0)
+    FROM UsoMedicamento um
+    WHERE um.id_medicamento = m.id_medicamento
+) < m.stock_minimo;
+
+
+-- S3: Jaulas libres
+SELECT
+    j.id_jaula,
+    j.numero,
+    j.tamano
+FROM internacion.Jaula j
+WHERE j.activa = 1
+AND j.id_jaula NOT IN (
+    SELECT i.id_jaula
+    FROM Internacion i
+    WHERE i.fecha_hora_egreso IS NULL
+);
+GO
