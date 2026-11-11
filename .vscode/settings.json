@@ -1,0 +1,10 @@
+{
+  "sqlfluff.executablePath": "${workspaceFolder}/.venv/bin/sqlfluff",
+  "sqlfluff.config": "${workspaceFolder}/.sqlfluff",
+  "sqlfluff.format.enabled": false,
+  "sqlfluff.linter.run": "onSave",
+  "mssql.format.options.multilineProcedureParametersList": true,
+  "[sql]": {
+    "editor.defaultFormatter": "ms-mssql.mssql"
+  }
+}
