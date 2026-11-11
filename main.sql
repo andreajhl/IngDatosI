@@ -1449,3 +1449,69 @@ WHERE  j.activa = 1
        AND j.id_jaula NOT IN (SELECT i.id_jaula
                               FROM   Internacion AS i
                               WHERE  i.fecha_hora_egreso IS NULL);
+
+
+GO
+------------------------------------------------------------------------------------
+---------------------- Permisos sobre vistas, funciones y SP -----------------------
+------------------------------------------------------------------------------------
+-- administrativo: alta y baja de mascotas, turnos y control de stock
+GRANT execute
+  ON dbo.sp_registrar_mascota TO rol_administrativo;
+
+GRANT execute
+  ON dbo.sp_baja_mascota TO rol_administrativo;
+
+GRANT execute
+  ON dbo.sp_asignar_turno TO rol_administrativo;
+
+GRANT execute
+  ON dbo.sp_reasignar_turnos TO rol_administrativo;
+
+GRANT execute
+  ON dbo.fn_veterinario_libre TO rol_administrativo;
+
+GRANT select
+  ON dbo.vw_mascota_dueno TO rol_administrativo;
+
+GRANT select
+  ON dbo.vw_stock_medicamento TO rol_administrativo;
+
+
+GO
+-- veterinario: atencion clinica, internacion y medicacion
+GRANT execute
+  ON dbo.sp_registrar_atencion TO rol_veterinario;
+
+GRANT execute
+  ON dbo.sp_internar_mascota TO rol_veterinario;
+
+GRANT execute
+  ON dbo.sp_egresar_internacion TO rol_veterinario;
+
+GRANT execute
+  ON dbo.sp_aplicar_medicamento TO rol_veterinario;
+
+GRANT select
+  ON dbo.fn_historia_clinica TO rol_veterinario;
+
+GRANT select
+  ON dbo.vw_mascota_dueno TO rol_veterinario;
+
+GRANT select
+  ON dbo.vw_internaciones_activas TO rol_veterinario;
+
+GRANT select
+  ON dbo.vw_stock_medicamento TO rol_veterinario;
+
+
+GO
+-- ayudante: seguimiento de internados y aplicacion de medicamentos
+GRANT execute
+  ON dbo.sp_aplicar_medicamento TO rol_ayudante;
+
+GRANT select
+  ON dbo.vw_internaciones_activas TO rol_ayudante;
+
+GRANT select
+  ON dbo.vw_stock_medicamento TO rol_ayudante;
