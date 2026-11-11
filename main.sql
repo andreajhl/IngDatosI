@@ -88,10 +88,10 @@ GO
 -- 3. Tablas de Personal y Agenda
 CREATE TABLE Empleado (
   id_empleado INT           IDENTITY (1, 1) PRIMARY KEY,
-  dni         INT           NOT NULL UNIQUE, -- dato sensible
+  dni         VARCHAR (20)  NOT NULL UNIQUE, -- dato sensible
   nombre      VARCHAR (50)  NOT NULL,
   apellido    VARCHAR (50)  NOT NULL,
-  telefono    VARCHAR (20)  NOT NULL, -- dato sensible
+  telefono    VARCHAR (30)  NOT NULL, -- dato sensible
   direccion   VARCHAR (100) NOT NULL, -- dato sensible
   tipo        VARCHAR (20)  NOT NULL CHECK (tipo IN ('veterinario', 'administrativo', 'ayudante')),
   activo      BIT           DEFAULT 1 NOT NULL -- baja logica
@@ -109,7 +109,7 @@ CREATE TABLE Administrativo (
 
 CREATE TABLE Ayudante (
   id_ayudante INT          NOT NULL PRIMARY KEY,
-  area        VARCHAR (20) NOT NULL CHECK (area IN ('consultorio', 'internacion', 'internación'))
+  area        VARCHAR (20) NOT NULL CHECK (area IN ('consultorio', 'internacion'))
 );
 
 CREATE TABLE Especialidad (
@@ -245,17 +245,22 @@ CREATE TABLE Internacion (
   tipo_egreso        VARCHAR (10)  NULL,
   CONSTRAINT CK_internacion_fechas CHECK (fecha_hora_egreso IS NULL
                                           OR fecha_hora_egreso > fecha_hora_ingreso),
-  CONSTRAINT CK_internacion_tipo_egreso CHECK (tipo_egreso IN ('alta', 'derivada', 'fallecida'))
+  CONSTRAINT CK_internacion_tipo_egreso CHECK (tipo_egreso IN ('alta', 'derivada', 'fallecida')),
+  -- fecha y tipo de egreso se cargan juntos: o estan los dos o ninguno
+  CONSTRAINT CK_internacion_egreso CHECK ((fecha_hora_egreso IS NULL
+                                           AND tipo_egreso IS NULL)
+                                          OR (fecha_hora_egreso IS NOT NULL
+                                              AND tipo_egreso IS NOT NULL))
 );
 
 CREATE TABLE EvolucionInternacion (
-  id_evolucion   INT            IDENTITY (1, 1) PRIMARY KEY,
-  id_internacion INT            NOT NULL,
-  id_empleado    INT            NOT NULL,
-  fecha_hora     DATETIME       DEFAULT GETDATE() NOT NULL,
-  temperatura    DECIMAL (4, 1) NULL,
-  peso           DECIMAL (7, 2) NULL,
-  observaciones  VARCHAR (1000) NULL
+  id_evolucion   INT             IDENTITY (1, 1) PRIMARY KEY,
+  id_internacion INT             NOT NULL,
+  id_empleado    INT             NOT NULL,
+  fecha_hora     DATETIME        DEFAULT GETDATE() NOT NULL,
+  temperatura    DECIMAL (4, 1)  NULL,
+  peso           DECIMAL (10, 2) NULL,
+  observaciones  VARCHAR (1000)  NULL
 );
 
 CREATE TABLE Medicamento (
@@ -324,37 +329,37 @@ GO
 -- 7. FK Personal y Agenda
 -- fk subtipos a empleado
 ALTER TABLE Veterinario
-  ADD FOREIGN KEY (id_veterinario) REFERENCES Empleado (id_empleado);
+  ADD CONSTRAINT FK_Veterinario_Empleado FOREIGN KEY (id_veterinario) REFERENCES Empleado (id_empleado);
 
 ALTER TABLE Administrativo
-  ADD FOREIGN KEY (id_administrativo) REFERENCES Empleado (id_empleado);
+  ADD CONSTRAINT FK_Administrativo_Empleado FOREIGN KEY (id_administrativo) REFERENCES Empleado (id_empleado);
 
 ALTER TABLE Ayudante
-  ADD FOREIGN KEY (id_ayudante) REFERENCES Empleado (id_empleado);
+  ADD CONSTRAINT FK_Ayudante_Empleado FOREIGN KEY (id_ayudante) REFERENCES Empleado (id_empleado);
 
 -- veterinario especialidad
 ALTER TABLE VeterinarioEspecialidad
-  ADD FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
+  ADD CONSTRAINT FK_VeterinarioEspecialidad_Veterinario FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 ALTER TABLE VeterinarioEspecialidad
-  ADD FOREIGN KEY (id_especialidad) REFERENCES Especialidad (id_especialidad);
+  ADD CONSTRAINT FK_VeterinarioEspecialidad_Especialidad FOREIGN KEY (id_especialidad) REFERENCES Especialidad (id_especialidad);
 
 -- turnos
 ALTER TABLE Turno
-  ADD FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
+  ADD CONSTRAINT FK_Turno_Veterinario FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 ALTER TABLE Turno
-  ADD FOREIGN KEY (id_especialidad) REFERENCES Especialidad (id_especialidad);
+  ADD CONSTRAINT FK_Turno_Especialidad FOREIGN KEY (id_especialidad) REFERENCES Especialidad (id_especialidad);
 
 ALTER TABLE Turno
-  ADD FOREIGN KEY (id_mascota) REFERENCES Mascota (id_mascota); -- tabla de opcion 1
+  ADD CONSTRAINT FK_Turno_Mascota FOREIGN KEY (id_mascota) REFERENCES Mascota (id_mascota); -- tabla de opcion 1
 
 -- guardias
 ALTER TABLE TurnoGuardiaVeterinario
-  ADD FOREIGN KEY (id_turno_guardia) REFERENCES TurnoGuardia (id_turno_guardia);
+  ADD CONSTRAINT FK_TurnoGuardiaVeterinario_TurnoGuardia FOREIGN KEY (id_turno_guardia) REFERENCES TurnoGuardia (id_turno_guardia);
 
 ALTER TABLE TurnoGuardiaVeterinario
-  ADD FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
+  ADD CONSTRAINT FK_TurnoGuardiaVeterinario_Veterinario FOREIGN KEY (id_veterinario) REFERENCES Veterinario (id_veterinario);
 
 
 GO
@@ -591,10 +596,10 @@ INSERT  INTO Empleado (
   direccion,
   tipo
 )
-VALUES                (25111000, 'Carlos', 'Ruiz', '1144440001', 'Av. Rivadavia 500', 'veterinario'),
-                      (27222000, 'Ana', 'Fernandez', '1144440002', 'Av. Cabildo 2100', 'veterinario'),
-                      (32333000, 'Julia', 'Martinez', '1144440003', 'Av. Santa Fe 800', 'administrativo'),
-                      (38444000, 'Diego', 'Hernandez', '1144440004', 'Callao 45', 'ayudante');
+VALUES                ('25111000', 'Carlos', 'Ruiz', '1144440001', 'Av. Rivadavia 500', 'veterinario'),
+                      ('27222000', 'Ana', 'Fernandez', '1144440002', 'Av. Cabildo 2100', 'veterinario'),
+                      ('32333000', 'Julia', 'Martinez', '1144440003', 'Av. Santa Fe 800', 'administrativo'),
+                      ('38444000', 'Diego', 'Hernandez', '1144440004', 'Callao 45', 'ayudante');
 
 INSERT  INTO Veterinario (
   id_veterinario,
