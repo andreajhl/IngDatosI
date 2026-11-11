@@ -61,7 +61,7 @@ CREATE TABLE Mascota (
   eutanasia        BIT           DEFAULT 0 NOT NULL,
   PRIMARY KEY (id_mascota),
   CONSTRAINT CK_Mascota_sexo CHECK (sexo IN ('M', 'H')),
-  CONSTRAINT CK_Mascota_fecha_nacimiento CHECK (fecha_nacimiento <= CAST (getdate() AS DATE)),
+  CONSTRAINT CK_Mascota_fecha_nacimiento CHECK (fecha_nacimiento <= CAST (GETDATE() AS DATE)),
   CONSTRAINT CK_Mascota_fecha_baja CHECK (fecha_baja IS NULL
                                           OR fecha_baja > fecha_nacimiento)
 );
@@ -456,59 +456,59 @@ CREATE ROLE rol_ayudante;
 
 
 GO
-GRANT select, insert
+GRANT SELECT, INSERT
   ON Dueno TO rol_administrativo;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON Mascota TO rol_administrativo;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON Turno TO rol_administrativo;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON TurnoGuardia TO rol_administrativo;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON MovimientoStock TO rol_administrativo;
 
-DENY select
+DENY SELECT
   ON Atencion (diagnostico) TO rol_administrativo;
 
 
 GO
-GRANT select, insert
+GRANT SELECT, INSERT
   ON Atencion TO rol_veterinario;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON Estudio TO rol_veterinario;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON Receta TO rol_veterinario;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON DetalleReceta TO rol_veterinario;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON Internacion TO rol_veterinario;
 
-DENY select
+DENY SELECT
   ON Dueno (dni, telefono, direccion) TO rol_veterinario;
 
-DENY select
+DENY SELECT
   ON Atencion (ref_pago_externo, estado_pago) TO rol_veterinario;
 
 
 GO
-GRANT select
+GRANT SELECT
   ON Internacion TO rol_ayudante;
 
-GRANT select, insert
+GRANT SELECT, INSERT
   ON EvolucionInternacion TO rol_ayudante;
 
-DENY select
+DENY SELECT
   ON Dueno (dni, telefono, email, direccion) TO rol_ayudante;
 
-DENY select
+DENY SELECT
   ON Atencion (diagnostico, ref_pago_externo, estado_pago) TO rol_ayudante;
 
 
@@ -814,7 +814,7 @@ BEGIN
              FROM   Turno
              WHERE  id_veterinario = @id_veterinario
                     AND estado = 'pendiente'
-                    AND abs(datediff(minute, fecha_hora, @fecha_hora)) < 30)
+                    AND ABS(DATEDIFF(MINUTE, fecha_hora, @fecha_hora)) < 30)
     RETURN 0;
   -- chequeamos que no este de guardia en ese horario (ni que el turno de 30 min se meta en una guardia)
   IF EXISTS (SELECT 1
@@ -824,7 +824,7 @@ BEGIN
                     ON tg.id_turno_guardia = tgv.id_turno_guardia
              WHERE  tgv.id_veterinario = @id_veterinario
                     AND @fecha_hora < tg.fecha_fin
-                    AND dateadd(minute, 30, @fecha_hora) > tg.fecha_inicio)
+                    AND DATEADD(MINUTE, 30, @fecha_hora) > tg.fecha_inicio)
     RETURN 0;
   RETURN 1;
 END
@@ -1088,7 +1088,7 @@ BEGIN
                  WHERE  v.id_veterinario = @id_veterinario
                         AND e.activo = 1)
     THROW 50000, 'El veterinario no existe o no se encuentra activo', 1;
-  IF @fecha_hora < getdate()
+  IF @fecha_hora < GETDATE()
     THROW 50000, 'No se puede asignar un turno en una fecha pasada', 1;
   -- si no es estudio, verificamos que el veterinario tenga esa especialidad
   IF @id_especialidad IS NOT NULL
@@ -1128,7 +1128,7 @@ AS
 BEGIN
   SET XACT_ABORT ON;
   BEGIN TRY
-    IF dbo.fn_mascota_activa(@id_mascota, CAST (getdate() AS DATE)) = 0
+    IF dbo.fn_mascota_activa(@id_mascota, CAST (GETDATE() AS DATE)) = 0
       THROW 50000, 'La mascota esta dada de baja o no existe', 1;
     -- si es por especialidad, validamos que el turno sea de esa mascota y este pendiente
     -- (que no sea null ya lo controla el check de la tabla)
@@ -1464,62 +1464,62 @@ GO
 ---------------------- Permisos sobre vistas, funciones y SP -----------------------
 ------------------------------------------------------------------------------------
 -- administrativo: alta y baja de mascotas, turnos y control de stock
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_registrar_mascota TO rol_administrativo;
 
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_baja_mascota TO rol_administrativo;
 
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_asignar_turno TO rol_administrativo;
 
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_reasignar_turnos TO rol_administrativo;
 
-GRANT execute
+GRANT EXECUTE
   ON dbo.fn_veterinario_libre TO rol_administrativo;
 
-GRANT select
+GRANT SELECT
   ON dbo.vw_mascota_dueno TO rol_administrativo;
 
-GRANT select
+GRANT SELECT
   ON dbo.vw_stock_medicamento TO rol_administrativo;
 
 
 GO
 -- veterinario: atencion clinica, internacion y medicacion
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_registrar_atencion TO rol_veterinario;
 
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_internar_mascota TO rol_veterinario;
 
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_egresar_internacion TO rol_veterinario;
 
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_aplicar_medicamento TO rol_veterinario;
 
-GRANT select
+GRANT SELECT
   ON dbo.fn_historia_clinica TO rol_veterinario;
 
-GRANT select
+GRANT SELECT
   ON dbo.vw_mascota_dueno TO rol_veterinario;
 
-GRANT select
+GRANT SELECT
   ON dbo.vw_internaciones_activas TO rol_veterinario;
 
-GRANT select
+GRANT SELECT
   ON dbo.vw_stock_medicamento TO rol_veterinario;
 
 
 GO
 -- ayudante: seguimiento de internados y aplicacion de medicamentos
-GRANT execute
+GRANT EXECUTE
   ON dbo.sp_aplicar_medicamento TO rol_ayudante;
 
-GRANT select
+GRANT SELECT
   ON dbo.vw_internaciones_activas TO rol_ayudante;
 
-GRANT select
+GRANT SELECT
   ON dbo.vw_stock_medicamento TO rol_ayudante;
