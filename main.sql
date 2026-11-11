@@ -548,8 +548,8 @@ INSERT  INTO Raza (
 )
 VALUES            (1, 'Labrador'),
                   (1, 'Caniche'),
-                  (2, 'Salchicha'),
-                  (2, 'Chihuhua');
+                  (2, 'Siames'),
+                  (2, 'Persa');
 
 INSERT  INTO Mascota (
   id_dueno,
@@ -636,7 +636,8 @@ INSERT  INTO Turno (
   id_especialidad
 )
 VALUES             ('2026-10-01 10:00', 'atendido', 1, 2, 1),
-                   ('2026-11-05 16:30', 'pendiente', 4, 2, 2);
+                   ('2026-12-05 16:30', 'pendiente', 4, 2, 2),
+                   ('2026-10-03 09:00', 'atendido', 1, 2, NULL); -- turno de estudio (radiografia)
 
 INSERT  INTO TurnoGuardia (
   fecha_inicio,
@@ -680,13 +681,14 @@ VALUES                (2, 1, 'GENERAL', '2026-09-20 11:00', 1, NULL, NULL, NULL,
 INSERT  INTO Estudio (
   id_atencion,
   id_tipo_estudio,
+  id_turno,
   fecha_solicitud,
   fecha_realizacion,
   fecha_resultado,
   resultado
 )
-VALUES               (2, 1, '2026-10-01 10:30', '2026-10-03 09:00', '2026-10-03 12:00', 'Silueta cardiaca levemente aumentada'),
-                     (3, 2, '2026-10-10 23:40', NULL, NULL, NULL);
+VALUES               (2, 1, 3, '2026-10-01 10:30', '2026-10-03 09:00', '2026-10-03 12:00', 'Silueta cardiaca levemente aumentada'),
+                     (3, 2, NULL, '2026-10-10 23:40', NULL, NULL, NULL);
 
 INSERT  INTO Receta (
   id_atencion,
@@ -736,28 +738,30 @@ INSERT  INTO EvolucionInternacion (
 VALUES                            (1, 4, '2026-10-11 08:00', 39.1, 6.70, 'Sin vomitos durante la noche'),
                                   (1, 1, '2026-10-11 18:00', 38.6, 6.75, 'Mejora notable, comienza a comer');
 
+INSERT  INTO MovimientoStock (
+  id_medicamento,
+  id_empleado,
+  tipo,
+  cantidad,
+  fecha_hora,
+  motivo
+)
+VALUES                       (1, 3, 'ingreso', 100, '2026-09-01 09:00', 'Compra a proveedor'),
+                             (2, 3, 'ingreso', 200, '2026-09-01 09:00', 'Compra a proveedor'),
+                             (3, 3, 'ingreso', 30, '2026-09-01 09:00', 'Compra a proveedor'),
+                             (1, 3, 'ajuste', -2, '2026-10-15 12:00', 'Vencimiento');
+
 INSERT  INTO UsoMedicamento (
   id_medicamento,
   id_atencion,
   id_evolucion,
   dosis,
   via_aplicacion,
-  cantidad
-)
-VALUES                      (2, 2, NULL, '0.5 ml', 'oral', 1),
-                            (1, NULL, 1, '1 comprimido', 'oral', 1);
-
-INSERT  INTO MovimientoStock (
-  id_medicamento,
-  id_empleado,
-  tipo,
   cantidad,
-  motivo
+  fecha_hora
 )
-VALUES                       (1, 3, 'ingreso', 100, 'Compra a proveedor'),
-                             (2, 3, 'ingreso', 200, 'Compra a proveedor'),
-                             (3, 3, 'ingreso', 30, 'Compra a proveedor'),
-                             (1, 3, 'ajuste', -2, 'Vencimiento');
+VALUES                      (2, 2, NULL, '0.5 ml', 'oral', 1, '2026-10-01 10:20'),
+                            (1, NULL, 1, '1 comprimido', 'oral', 1, '2026-10-11 08:00');
 
 
 GO
