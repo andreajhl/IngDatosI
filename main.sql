@@ -471,6 +471,22 @@ GRANT SELECT, INSERT
 GRANT SELECT, INSERT
   ON MovimientoStock TO rol_administrativo;
 
+GRANT SELECT, INSERT
+  ON TurnoGuardiaVeterinario TO rol_administrativo;
+
+GRANT SELECT
+  ON Raza TO rol_administrativo;
+
+GRANT SELECT
+  ON Especie TO rol_administrativo;
+
+GRANT SELECT
+  ON Medicamento TO rol_administrativo;
+
+-- ve las atenciones para gestionar pagos, pero no el diagnostico
+GRANT SELECT
+  ON Atencion TO rol_administrativo;
+
 DENY SELECT
   ON Atencion (diagnostico) TO rol_administrativo;
 
@@ -491,6 +507,43 @@ GRANT SELECT, INSERT
 GRANT SELECT, INSERT
   ON Internacion TO rol_veterinario;
 
+GRANT SELECT, INSERT
+  ON EvolucionInternacion TO rol_veterinario;
+
+GRANT SELECT
+  ON Mascota TO rol_veterinario;
+
+GRANT SELECT
+  ON Raza TO rol_veterinario;
+
+GRANT SELECT
+  ON Especie TO rol_veterinario;
+
+GRANT SELECT
+  ON Alergia TO rol_veterinario;
+
+GRANT SELECT
+  ON MascotaAlergia TO rol_veterinario;
+
+GRANT SELECT
+  ON Turno TO rol_veterinario;
+
+GRANT SELECT
+  ON TipoEstudio TO rol_veterinario;
+
+GRANT SELECT
+  ON Medicamento TO rol_veterinario;
+
+GRANT SELECT
+  ON UsoMedicamento TO rol_veterinario;
+
+GRANT SELECT
+  ON internacion.Jaula TO rol_veterinario;
+
+-- ve al dueño para contactarlo, pero no sus datos sensibles
+GRANT SELECT
+  ON Dueno TO rol_veterinario;
+
 DENY SELECT
   ON Dueno (dni, telefono, direccion) TO rol_veterinario;
 
@@ -505,8 +558,28 @@ GRANT SELECT
 GRANT SELECT, INSERT
   ON EvolucionInternacion TO rol_ayudante;
 
+GRANT SELECT
+  ON Mascota TO rol_ayudante;
+
+GRANT SELECT
+  ON Medicamento TO rol_ayudante;
+
+GRANT SELECT
+  ON UsoMedicamento TO rol_ayudante;
+
+GRANT SELECT
+  ON internacion.Jaula TO rol_ayudante;
+
+-- solo el nombre del dueño, sin datos de contacto
+GRANT SELECT
+  ON Dueno TO rol_ayudante;
+
 DENY SELECT
   ON Dueno (dni, telefono, email, direccion) TO rol_ayudante;
+
+-- necesita la atencion para vincular la internacion con la mascota, sin datos clinicos ni de pago
+GRANT SELECT
+  ON Atencion TO rol_ayudante;
 
 DENY SELECT
   ON Atencion (diagnostico, ref_pago_externo, estado_pago) TO rol_ayudante;
@@ -1523,3 +1596,472 @@ GRANT SELECT
 
 GRANT SELECT
   ON dbo.vw_stock_medicamento TO rol_ayudante;
+
+
+GO
+------------------------------------------------------------------------------------
+------------------------------------- Pruebas --------------------------------------
+------------------------------------------------------------------------------------
+
+-- P1. Funciones
+-- toby esta activa (1)
+SELECT dbo.fn_mascota_activa(1, CAST (GETDATE() AS DATE)) AS toby_activa;
+-- stock actual de cada medicamento
+SELECT id_medicamento,
+       nombre_comercial,
+       dbo.fn_stock_actual(id_medicamento) AS stock_actual
+FROM   Medicamento;
+
+-- ana tiene turno pendiente el 05/12 16.30, a las 18 esta libre (1)
+-- carlos estaba de guardia el 10/10 a las 22 (0)
+SELECT dbo.fn_veterinario_libre(2, '2026-12-05 16:40') AS ana_16_40,
+       dbo.fn_veterinario_libre(2, '2026-12-05 18:00') AS ana_18_00,
+       dbo.fn_veterinario_libre(1, '2026-10-10 22:00') AS carlos_guardia;
+
+-- historia clinica de toby: atencion de cardiologia y radiografia
+SELECT *
+FROM   dbo.fn_historia_clinica(1)
+ORDER BY fecha;
+
+
+GO
+-- P2. Vistas
+SELECT *
+FROM   dbo.vw_mascota_dueno;
+
+SELECT *
+FROM   dbo.vw_stock_medicamento;
+
+-- no hay internaciones abiertas en los datos de carga
+SELECT *
+FROM   dbo.vw_internaciones_activas;
+
+
+GO
+-- P3. sp_registrar_mascota
+-- dueño nuevo: crea el dueño y la mascota
+EXEC sp_registrar_mascota @dni = '40111222', @nombre = 'Pablo', @apellido = 'Perez', @telefono = '1155550004',
+                          @nombre_mascota = 'Rocky', @id_raza = 1, @sexo = 'M', @fecha_nacimiento = '2024-02-10';
+
+-- dueño existente (laura): no duplica el dueño, solo agrega la mascota
+EXEC sp_registrar_mascota @dni = '30111222', @nombre = 'Laura', @apellido = 'Linarez', @telefono = '1155550001',
+                          @nombre_mascota = 'Nala', @id_raza = 3, @sexo = 'H', @fecha_nacimiento = '2025-05-01';
+
+SELECT d.dni,
+       d.nombre,
+       d.apellido,
+       m.nombre AS mascota
+FROM   Dueno AS d
+       INNER JOIN
+       Mascota AS m
+       ON m.id_dueno = d.id_dueno
+WHERE  d.dni IN ('40111222', '30111222');
+
+
+GO
+-- P4. sp_asignar_turno
+DECLARE @rocky AS INT = (SELECT id_mascota
+                         FROM   Mascota
+                         WHERE  nombre = 'Rocky');
+DECLARE @luna AS INT = (SELECT id_mascota
+                        FROM   Mascota
+                        WHERE  nombre = 'Luna');
+DECLARE @dia AS DATETIME = DATEADD(DAY, 7, CAST (CAST (GETDATE() AS DATE) AS DATETIME));
+DECLARE @t1 AS DATETIME = DATEADD(HOUR, 10, @dia);                    -- rocky con ana, cardiologia
+DECLARE @t2 AS DATETIME = DATEADD(HOUR, 35, @dia);                    -- luna con carlos, estudio
+DECLARE @t3 AS DATETIME = DATEADD(HOUR, 58, @dia);                    -- estudio con ana, para reasignar
+DECLARE @ayer AS DATETIME = DATEADD(DAY, -1, GETDATE());
+
+EXEC sp_asignar_turno @id_mascota = @rocky, @id_veterinario = 2, @fecha_hora = @t1, @id_especialidad = 1;
+EXEC sp_asignar_turno @id_mascota = @luna, @id_veterinario = 1, @fecha_hora = @t2;
+EXEC sp_asignar_turno @id_mascota = @rocky, @id_veterinario = 2, @fecha_hora = @t3;
+
+-- error: carlos no tiene cardiologia
+BEGIN TRY
+  EXEC sp_asignar_turno @id_mascota = @rocky, @id_veterinario = 1, @fecha_hora = @t1, @id_especialidad = 1;
+END TRY
+BEGIN CATCH
+  SELECT 'P4 especialidad' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: ana ya tiene turno en ese horario
+BEGIN TRY
+  EXEC sp_asignar_turno @id_mascota = @luna, @id_veterinario = 2, @fecha_hora = @t1, @id_especialidad = 1;
+END TRY
+BEGIN CATCH
+  SELECT 'P4 veterinario ocupado' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: fecha pasada
+BEGIN TRY
+  EXEC sp_asignar_turno @id_mascota = @rocky, @id_veterinario = 2, @fecha_hora = @ayer, @id_especialidad = 1;
+END TRY
+BEGIN CATCH
+  SELECT 'P4 fecha pasada' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+SELECT *
+FROM   Turno
+WHERE  estado = 'pendiente';
+
+
+GO
+-- P5. sp_registrar_atencion
+DECLARE @rocky AS INT = (SELECT id_mascota
+                         FROM   Mascota
+                         WHERE  nombre = 'Rocky');
+DECLARE @turno AS INT = (SELECT id_turno
+                         FROM   Turno
+                         WHERE  id_mascota = @rocky
+                                AND id_especialidad = 1
+                                AND estado = 'pendiente');
+
+-- atencion de especialidad con turno, el turno pasa a atendido
+EXEC sp_registrar_atencion @id_mascota = @rocky, @id_veterinario = 2, @tipo = 'ESPECIALIDAD',
+                           @motivo = 'Control cardiologico', @peso = 12.30, @temperatura = 38.4,
+                           @diagnostico = 'Sin hallazgos', @id_turno = @turno;
+
+-- atencion general de simba, se usa despues para internarlo
+EXEC sp_registrar_atencion @id_mascota = 4, @id_veterinario = 1, @tipo = 'GENERAL',
+                           @motivo = 'Decaimiento y fiebre', @peso = 4.10, @temperatura = 40.1,
+                           @diagnostico = 'Infeccion respiratoria', @orden_llegada = 1;
+
+-- error: el turno ya fue atendido
+BEGIN TRY
+  EXEC sp_registrar_atencion @id_mascota = @rocky, @id_veterinario = 2, @tipo = 'ESPECIALIDAD',
+                             @motivo = 'Repetida', @peso = 12.30, @diagnostico = 'x', @id_turno = @turno;
+END TRY
+BEGIN CATCH
+  SELECT 'P5 turno ya atendido' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+SELECT id_turno,
+       estado
+FROM   Turno
+WHERE  id_turno = @turno;
+
+
+GO
+-- P6. sp_reasignar_turnos (cursor)
+-- ana se ausenta: el turno de estudio pasa a carlos y el de dermatologia se cancela (nadie mas tiene esa especialidad)
+EXEC sp_reasignar_turnos @id_veterinario = 2, @desde = '2026-01-01';
+
+SELECT id_turno,
+       fecha_hora,
+       estado,
+       id_veterinario,
+       id_especialidad
+FROM   Turno
+ORDER BY id_turno;
+
+
+GO
+-- P7. sp_internar_mascota, indice de jaula abierta y vista de internaciones
+DECLARE @atencion_simba AS INT = (SELECT MAX(id_atencion)
+                                  FROM   Atencion
+                                  WHERE  id_mascota = 4);
+
+EXEC dbo.sp_internar_mascota @id_atencion = @atencion_simba, @id_veterinario = 1, @id_jaula = 2,
+                             @motivo = 'Infeccion respiratoria';
+
+-- error: la jaula 2 esta ocupada
+BEGIN TRY
+  EXEC dbo.sp_internar_mascota @id_atencion = 3, @id_veterinario = 1, @id_jaula = 2, @motivo = 'x';
+END TRY
+BEGIN CATCH
+  SELECT 'P7 jaula ocupada' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: simba ya esta internado
+BEGIN TRY
+  EXEC dbo.sp_internar_mascota @id_atencion = @atencion_simba, @id_veterinario = 1, @id_jaula = 1, @motivo = 'x';
+END TRY
+BEGIN CATCH
+  SELECT 'P7 mascota ya internada' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: la atencion no existe
+BEGIN TRY
+  EXEC dbo.sp_internar_mascota @id_atencion = 999, @id_veterinario = 1, @id_jaula = 1, @motivo = 'x';
+END TRY
+BEGIN CATCH
+  SELECT 'P7 atencion inexistente' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: jaula dada de baja (se reactiva al terminar)
+UPDATE internacion.Jaula
+SET    activa = 0
+WHERE  id_jaula = 1;
+
+BEGIN TRY
+  EXEC dbo.sp_internar_mascota @id_atencion = 3, @id_veterinario = 1, @id_jaula = 1, @motivo = 'x';
+END TRY
+BEGIN CATCH
+  SELECT 'P7 jaula inactiva' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+UPDATE internacion.Jaula
+SET    activa = 1
+WHERE  id_jaula = 1;
+
+-- error: el indice unico filtrado frena un insert directo en la jaula ocupada
+BEGIN TRY
+  INSERT  INTO Internacion (
+    id_atencion,
+    id_veterinario,
+    id_jaula,
+    motivo,
+    fecha_hora_ingreso
+  )
+  VALUES                   (3, 1, 2, 'Insert directo', GETDATE());
+END TRY
+BEGIN CATCH
+  SELECT 'P7 indice jaula abierta' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+SELECT *
+FROM   dbo.vw_internaciones_activas;
+
+-- S3 con la jaula 2 ocupada: solo queda libre la 1
+SELECT j.id_jaula,
+       j.numero,
+       j.tamano
+FROM   internacion.Jaula AS j
+WHERE  j.activa = 1
+       AND j.id_jaula NOT IN (SELECT i.id_jaula
+                              FROM   Internacion AS i
+                              WHERE  i.fecha_hora_egreso IS NULL);
+
+
+GO
+-- P8. sp_aplicar_medicamento y trigger de stock
+DECLARE @internacion AS INT = (SELECT i.id_internacion
+                               FROM   Internacion AS i
+                                      INNER JOIN
+                                      Atencion AS a
+                                      ON a.id_atencion = i.id_atencion
+                               WHERE  a.id_mascota = 4
+                                      AND i.fecha_hora_egreso IS NULL);
+
+INSERT  INTO EvolucionInternacion (
+  id_internacion,
+  id_empleado,
+  temperatura,
+  peso,
+  observaciones
+)
+VALUES                            (@internacion, 4, 39.5, 4.05, 'Sigue con fiebre');
+
+DECLARE @evolucion AS INT = SCOPE_IDENTITY();
+
+-- ivomec tiene 30: se aplican 25 y queda debajo del minimo (10)
+EXEC dbo.sp_aplicar_medicamento @id_medicamento = 3, @cantidad = 25, @id_evolucion = @evolucion,
+                                @dosis = '25 ml', @via_aplicacion = 'subcutanea';
+
+-- error: no alcanza el stock
+BEGIN TRY
+  EXEC dbo.sp_aplicar_medicamento @id_medicamento = 3, @cantidad = 100, @id_evolucion = @evolucion;
+END TRY
+BEGIN CATCH
+  SELECT 'P8 stock insuficiente (sp)' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: el medicamento no existe
+BEGIN TRY
+  EXEC dbo.sp_aplicar_medicamento @id_medicamento = 999, @cantidad = 1, @id_evolucion = @evolucion;
+END TRY
+BEGIN CATCH
+  SELECT 'P8 medicamento inexistente' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: un insert directo sin pasar por el sp lo frena el trigger
+BEGIN TRY
+  INSERT  INTO UsoMedicamento (
+    id_medicamento,
+    id_evolucion,
+    cantidad
+  )
+  VALUES                      (3, @evolucion, 100);
+END TRY
+BEGIN CATCH
+  IF @@TRANCOUNT > 0
+    ROLLBACK;
+  SELECT 'P8 stock insuficiente (trigger)' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- ivomec aparece en falta en la vista y en S2
+SELECT *
+FROM   dbo.vw_stock_medicamento;
+
+SELECT m.id_medicamento,
+       m.nombre_comercial,
+       m.stock_minimo
+FROM   Medicamento AS m
+WHERE  m.activo = 1
+       AND dbo.fn_stock_actual(m.id_medicamento) < m.stock_minimo;
+
+
+GO
+-- P9. sp_egresar_internacion
+-- la espera evita que el egreso tenga el mismo instante que el ingreso (CK_internacion_fechas)
+WAITFOR DELAY '00:00:01';
+
+DECLARE @internacion AS INT = (SELECT i.id_internacion
+                               FROM   Internacion AS i
+                                      INNER JOIN
+                                      Atencion AS a
+                                      ON a.id_atencion = i.id_atencion
+                               WHERE  a.id_mascota = 4
+                                      AND i.fecha_hora_egreso IS NULL);
+
+EXEC dbo.sp_egresar_internacion @id_internacion = @internacion, @tipo_egreso = 'alta';
+
+-- error: ya esta cerrada
+BEGIN TRY
+  EXEC dbo.sp_egresar_internacion @id_internacion = @internacion, @tipo_egreso = 'alta';
+END TRY
+BEGIN CATCH
+  SELECT 'P9 internacion cerrada' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- historia clinica de simba: atencion e internacion con alta
+SELECT *
+FROM   dbo.fn_historia_clinica(4)
+ORDER BY fecha;
+
+
+GO
+-- P10. sp_baja_mascota y trigger tr_mascota_baja
+-- luna tiene un turno pendiente; se interna y despues se da de baja:
+-- el trigger cancela el turno y cierra la internacion como fallecida
+EXEC dbo.sp_internar_mascota @id_atencion = 3, @id_veterinario = 1, @id_jaula = 1, @motivo = 'Recaida';
+
+WAITFOR DELAY '00:00:01';
+
+EXEC sp_baja_mascota @id_mascota = 3;
+
+SELECT dbo.fn_mascota_activa(3, CAST (GETDATE() AS DATE)) AS luna_activa;
+
+SELECT id_turno,
+       estado
+FROM   Turno
+WHERE  id_mascota = 3;
+
+SELECT id_internacion,
+       fecha_hora_egreso,
+       tipo_egreso
+FROM   Internacion
+WHERE  id_atencion = 3;
+
+-- error: ya esta dada de baja
+BEGIN TRY
+  EXEC sp_baja_mascota @id_mascota = 3;
+END TRY
+BEGIN CATCH
+  SELECT 'P10 baja repetida' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+-- error: no se le puede dar turno a una mascota de baja
+DECLARE @manana AS DATETIME = DATEADD(DAY, 1, GETDATE());
+
+BEGIN TRY
+  EXEC sp_asignar_turno @id_mascota = 3, @id_veterinario = 1, @fecha_hora = @manana;
+END TRY
+BEGIN CATCH
+  SELECT 'P10 turno a mascota de baja' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+
+GO
+-- P11. Permisos por rol
+-- usuarios sin login, uno por rol, para probar con EXECUTE AS
+CREATE USER u_administrativo WITHOUT LOGIN;
+
+CREATE USER u_veterinario WITHOUT LOGIN;
+
+CREATE USER u_ayudante WITHOUT LOGIN;
+
+ALTER ROLE rol_administrativo ADD MEMBER u_administrativo;
+
+ALTER ROLE rol_veterinario ADD MEMBER u_veterinario;
+
+ALTER ROLE rol_ayudante ADD MEMBER u_ayudante;
+
+
+GO
+-- administrativo: ve los pagos, pero no el diagnostico
+EXECUTE AS USER = 'u_administrativo';
+
+SELECT id_atencion,
+       estado_pago
+FROM   Atencion;
+
+BEGIN TRY
+  SELECT diagnostico
+  FROM   Atencion;
+END TRY
+BEGIN CATCH
+  SELECT 'P11 administrativo diagnostico' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+REVERT;
+
+
+GO
+-- veterinario: ve el nombre del dueño, pero no el dni
+EXECUTE AS USER = 'u_veterinario';
+
+SELECT nombre,
+       apellido,
+       email
+FROM   Dueno;
+
+BEGIN TRY
+  SELECT dni
+  FROM   Dueno;
+END TRY
+BEGIN CATCH
+  SELECT 'P11 veterinario dni' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+REVERT;
+
+
+GO
+-- ayudante: ve las mascotas, pero no puede registrar atenciones
+EXECUTE AS USER = 'u_ayudante';
+
+SELECT id_mascota,
+       nombre
+FROM   Mascota;
+
+BEGIN TRY
+  EXEC sp_registrar_atencion @id_mascota = 1, @id_veterinario = 1, @tipo = 'GENERAL',
+                             @motivo = 'x', @peso = 1, @diagnostico = 'x';
+END TRY
+BEGIN CATCH
+  SELECT 'P11 ayudante registra atencion' AS prueba,
+         ERROR_MESSAGE() AS error_esperado;
+END CATCH
+
+REVERT;
+
+
+GO
